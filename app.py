@@ -5,9 +5,8 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 128 * 1024 * 1024  # 128MB max file size
 
-# Создаем папку для загрузок, если её нет
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 ALLOWED_EXTENSIONS = {'md'}
@@ -68,9 +67,13 @@ def get_file_content(filename):
             content = f.read()
         
         # Конвертируем markdown в HTML
+        # fenced_code автоматически добавляет классы языка к блокам кода
         html_content = markdown.markdown(
             content,
-            extensions=['fenced_code', 'tables', 'codehilite']
+            extensions=['fenced_code', 'tables'],
+            extension_configs={
+                'fenced_code': {}
+            }
         )
         
         return jsonify({'content': html_content, 'filename': filename}), 200

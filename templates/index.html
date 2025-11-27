@@ -4,6 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MD Reader</title>
+    <!-- Highlight.js для подсветки синтаксиса -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/yaml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/markdown.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -263,6 +276,17 @@
             display: block;
         }
 
+        /* Стили для highlight.js */
+        .markdown-content pre code.hljs {
+            padding: 0;
+            background: transparent;
+        }
+
+        .markdown-content pre.hljs {
+            background-color: #2a2a2a;
+            padding: 16px;
+        }
+
         .code-block-wrapper {
             position: relative;
             margin-bottom: 16px;
@@ -477,6 +501,8 @@
                     document.getElementById('contentBody').innerHTML = `
                         <div class="markdown-content">${data.content}</div>
                     `;
+                    // Подсветка синтаксиса
+                    highlightCode();
                     // Добавляем кнопки копирования к блокам кода
                     addCopyButtons();
                     loadFileList(); // Обновляем список, чтобы выделить активный файл
@@ -486,6 +512,17 @@
             } catch (error) {
                 alert('Ошибка при загрузке файла: ' + error.message);
             }
+        }
+
+        // Подсветка синтаксиса кода
+        function highlightCode() {
+            // Markdown с расширением fenced_code создает HTML: <pre><code class="language-json">
+            // Библиотека highlight.js (подключена через CDN выше) обработает блоки с классом language-*
+            const codeBlocks = document.querySelectorAll('.markdown-content pre code');
+            codeBlocks.forEach((block) => {
+                // Подсвечиваем код (hljs - это глобальная переменная из highlight.js)
+                hljs.highlightElement(block);
+            });
         }
 
         // Добавление кнопок копирования к блокам кода
