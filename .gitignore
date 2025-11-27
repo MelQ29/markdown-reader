@@ -36,7 +36,7 @@ instance/
 
 # Загруженные файлы пользователей
 uploads/
-*.md
+uploads/*.md
 
 # IDE
 .vscode/
