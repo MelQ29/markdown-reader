@@ -47,38 +47,68 @@ def upload_file():
     
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
+        
+        # Проверяем, есть ли новое имя в запросе (для случая с дубликатом)
+        new_filename_from_request = request.form.get('newFilename')
+        if new_filename_from_request:
+            filename = secure_filename(new_filename_from_request)
+            if not filename.lower().endswith('.md'):
+                filename += '.md'
+
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+        # Если файл существует и не было запроса на переименование, возвращаем ошибку
+        if os.path.exists(filepath) and not new_filename_from_request:
+            return jsonify({'error': 'file_exists', 'filename': filename}), 409 # 409 Conflict
+
         file.save(filepath)
         return jsonify({'message': 'Файл успешно загружен', 'filename': filename}), 200
     
     return jsonify({'error': 'Недопустимый формат файла. Разрешены только .md файлы'}), 400
 
-@app.route('/api/file/<filename>', methods=['GET'])
-def get_file_content(filename):
-    """Получить содержимое файла в формате HTML"""
+@app.route('/api/file/<filename>', methods=['GET', 'POST'])
+def file_content(filename):
+    """Получить или обновить содержимое файла"""
     filename = secure_filename(filename)
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    
+
     if not os.path.exists(filepath):
         return jsonify({'error': 'Файл не найден'}), 404
-    
+
+    if request.method == 'POST':
+        # Обновление файла
+        data = request.get_json()
+        content = data.get('content')
+
+        if content is None:
+            return jsonify({'error': 'Содержимое не найдено'}), 400
+
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return jsonify({'message': 'Файл успешно сохранен'}), 200
+        except Exception as e:
+            return jsonify({'error': f'Ошибка при сохранении файла: {str(e)}'}), 500
+
+    # GET-запрос: получение содержимого
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
+            raw_content = f.read()
         
-        # Конвертируем markdown в HTML
-        # fenced_code автоматически добавляет классы языка к блокам кода
         html_content = markdown.markdown(
-            content,
+            raw_content,
             extensions=['fenced_code', 'tables'],
-            extension_configs={
-                'fenced_code': {}
-            }
+            extension_configs={'fenced_code': {}}
         )
         
-        return jsonify({'content': html_content, 'filename': filename}), 200
+        return jsonify({
+            'raw_content': raw_content,
+            'html_content': html_content,
+            'filename': filename
+        }), 200
     except Exception as e:
         return jsonify({'error': f'Ошибка при чтении файла: {str(e)}'}), 500
+
 
 @app.route('/api/delete/<filename>', methods=['DELETE'])
 def delete_file(filename):
@@ -94,6 +124,37 @@ def delete_file(filename):
         return jsonify({'message': 'Файл успешно удален'}), 200
     except Exception as e:
         return jsonify({'error': f'Ошибка при удалении файла: {str(e)}'}), 500
+
+@app.route('/api/rename/<filename>', methods=['POST'])
+def rename_file(filename):
+    """Переименовать файл"""
+    filename = secure_filename(filename)
+    old_filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+    if not os.path.exists(old_filepath):
+        return jsonify({'error': 'Файл для переименования не найден'}), 404
+
+    data = request.get_json()
+    new_name = data.get('newName')
+
+    if not new_name:
+        return jsonify({'error': 'Новое имя не указано'}), 400
+
+    if not new_name.lower().endswith('.md'):
+        new_name += '.md'
+
+    new_name = secure_filename(new_name)
+    new_filepath = os.path.join(app.config['UPLOAD_FOLDER'], new_name)
+
+    if os.path.exists(new_filepath):
+        return jsonify({'error': f'Файл с именем "{new_name}" уже существует'}), 409
+
+    try:
+        os.rename(old_filepath, new_filepath)
+        return jsonify({'message': 'Файл успешно переименован', 'newName': new_name}), 200
+    except Exception as e:
+        return jsonify({'error': f'Ошибка при переименовании файла: {str(e)}'}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)

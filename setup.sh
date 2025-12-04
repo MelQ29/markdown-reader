@@ -13,11 +13,10 @@ echo "Установка зависимостей..."
 pip install -r requirements.txt
 
 echo ""
-echo "✅ Установка завершена!"
+echo "Установка завершена!"
 echo ""
 echo "Для запуска приложения:"
 echo "1. Активируйте виртуальное окружение: source venv/bin/activate"
 echo "2. Запустите приложение: python app.py"
 echo ""
 echo "Или используйте скрипт run.sh для автоматического запуска"
-
