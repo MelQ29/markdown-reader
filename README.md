@@ -2,6 +2,8 @@
 
 Простое и удобное веб-приложение для чтения и редактирования Markdown файлов прямо в браузере.
 
+![markdown-reader-demo](https://github.com/user-attachments/assets/a26b705b-f0ff-409f-b2f6-670425a99e52)
+
 ## Возможности
 
 ### Управление файлами
