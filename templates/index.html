@@ -17,6 +17,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/css.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/yaml.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.2/markdown-it.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
 <style>
     * {
         margin: 0;
@@ -495,6 +497,277 @@
         font-size: 16px;
     }
 
+    .edit-split {
+        display: none;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        height: calc(100vh - 160px);
+    }
+
+    .edit-split.visible {
+        display: grid;
+    }
+
+    .edit-pane {
+        background-color: #1e1e1e;
+        border: 1px solid #333;
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .edit-pane header {
+        padding: 10px 14px;
+        border-bottom: 1px solid #333;
+        background-color: #252525;
+        font-weight: 600;
+        color: #fff;
+    }
+
+    .live-preview {
+        flex: 1;
+        overflow: auto;
+        padding: 16px;
+        background-color: #1a1a1a;
+    }
+
+    .markdown-editor {
+        position: relative;
+        flex: 1;
+        height: auto;
+        display: block;
+    }
+
+    .toolbar-container {
+        border-top: 1px solid #333;
+        background-color: #252525;
+    }
+
+    .markdown-toolbar {
+        position: relative;
+        padding: 8px 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        border-top: none;
+        bottom: auto;
+        left: auto;
+    }
+
+    .markdown-toolbar.hidden {
+        display: none;
+    }
+
+    /* Diff modal after save */
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 20px;
+    }
+
+    .modal-backdrop.visible {
+        display: flex;
+    }
+
+    .modal {
+        background-color: #1f1f1f;
+        border: 1px solid #333;
+        border-radius: 10px;
+        width: 100%;
+        height: 100%;
+        max-width: none;
+        max-height: none;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+
+    .modal-header, .modal-footer {
+        padding: 12px 16px;
+        border-bottom: 1px solid #333;
+        background-color: #252525;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .modal-footer {
+        border-top: 1px solid #333;
+        border-bottom: none;
+    }
+
+    .modal-body {
+        padding: 12px 16px;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+        flex: 1;
+    }
+
+    .diff-view-toggle {
+        display: flex;
+        gap: 8px;
+    }
+
+    .diff-view-toggle button {
+        background-color: #333;
+        color: #e0e0e0;
+        border: 1px solid #444;
+        padding: 8px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .diff-view-toggle button.active {
+        background-color: #ff5555;
+        border-color: #ff5555;
+    }
+
+    .diff-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        flex: 1;
+        min-height: 50vh;
+        align-items: stretch;
+    }
+
+    .diff-column {
+        background-color: #252525;
+        border: 1px solid #333;
+        border-radius: 6px;
+        padding: 12px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .diff-column h3 {
+        margin-bottom: 10px;
+        color: #fff;
+        font-size: 16px;
+    }
+
+    .diff-raw {
+        max-height: 240px;
+        overflow: auto;
+        background-color: #1e1e1e;
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 10px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.4;
+        margin-bottom: 12px;
+        white-space: pre-wrap;
+    }
+
+    .diff-rendered {
+        flex: 1;
+        overflow: auto;
+        padding: 10px;
+        background-color: #1e1e1e;
+        border: 1px solid #333;
+        border-radius: 4px;
+    }
+
+    .raw-diff-table {
+        flex: 1;
+        overflow: auto;
+        border: 1px solid #333;
+        border-radius: 4px;
+        min-height: 200px;
+    }
+
+    .cancel-edit-btn {
+        background-color: #555;
+    }
+
+    .cancel-edit-btn:hover {
+        background-color: #444;
+    }
+
+    .raw-diff-table table.diff {
+        width: 100%;
+        table-layout: auto;
+        border-collapse: collapse;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+    }
+
+    .raw-diff-table .diff_header {
+        background: #2a2a2a;
+        color: #e0e0e0;
+    }
+
+    .raw-diff-table .diff_next {
+        display: none;
+    }
+
+    .raw-diff-table td, .raw-diff-table th {
+        border: 1px solid #333;
+        padding: 4px 6px;
+        color: #e0e0e0;
+        white-space: pre;
+        word-break: normal;
+        vertical-align: top;
+    }
+
+    .raw-diff-table .diff_next, .raw-diff-table .diff_header {
+        background: #2a2a2a;
+    }
+
+    .raw-diff-table .diff_add {
+        background: rgba(76, 255, 120, 0.35);
+    }
+
+    .raw-diff-table .diff_chg {
+        background: rgba(255, 221, 87, 0.35);
+    }
+
+    .raw-diff-table .diff_sub {
+        background: rgba(255, 110, 110, 0.35);
+    }
+
+    .raw-diff-table a {
+        color: inherit;
+        text-decoration: none;
+        pointer-events: none;
+    }
+
+    .diff-mark-add {
+        background: rgba(76, 255, 120, 0.35) !important;
+        color: inherit;
+    }
+
+    .diff-mark-sub {
+        background: rgba(255, 110, 110, 0.35) !important;
+        color: inherit;
+    }
+
+    .diff-mark-chg {
+        background: rgba(255, 221, 87, 0.35) !important;
+        color: inherit;
+    }
+
+    /* Сбрасываем фон у mark внутри рендеренного diff */
+    .diff-rendered mark {
+        background: transparent !important;
+        color: inherit;
+        padding: 0;
+    }
+
 </style>
 </head>
 <body>
@@ -518,32 +791,80 @@
                 <div class="content">
                     <div class="content-header">
                         <h2 id="contentTitle">Выберите файл для просмотра</h2>
-                        <button id="editToggleBtn" class="edit-toggle-btn" onclick="toggleEditMode()">Редактировать</button>
+                        <div style="display: flex; gap: 10px;">
+                            <button id="cancelEditBtn" class="edit-toggle-btn cancel-edit-btn" style="display:none;" onclick="cancelEdit()">Отменить</button>
+                            <button id="editToggleBtn" class="edit-toggle-btn" onclick="toggleEditMode()">Редактировать</button>
+                        </div>
                     </div>
                     <div class="content-body" id="contentBody">
                         <div class="welcome-message">
                             <h2>Добро пожаловать!</h2>
                             <p>Загрузите .md файл, чтобы начать чтение</p>
                         </div>
-                        <div class="markdown-content-wrapper"></div>
-                        <textarea id="markdownEditor" class="markdown-editor"></textarea>
-                        <div id="markdownToolbar" class="markdown-toolbar">
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('**', '**', 'жирный текст')"><b>B</b></button>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('*', '*', 'курсив')"><i>I</i></button>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('~~', '~~', 'зачеркнутый')"><s>S</s></button>
-                            <div class="toolbar-separator"></div>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('# ', '', 'Заголовок 1', true)">H1</button>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('## ', '', 'Заголовок 2', true)">H2</button>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('### ', '', 'Заголовок 3', true)">H3</button>
-                            <div class="toolbar-separator"></div>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('> ', '', 'Цитата', true)">”</button>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('`', '`', 'код')">`</button>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('```\\n', '\\n```', 'блок кода')">```</button>
-                            <div class="toolbar-separator"></div>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('* ', '', 'Элемент списка', true)">●</button>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('1. ', '', 'Элемент списка', true)">1.</button>
-                            <button class="toolbar-btn" onclick="toggleMarkdownFormatting('[', '](https://)', 'текст ссылки')">🔗</button>
+                            <div id="mainMarkdownContent" class="markdown-content"></div>
+                        <div id="editSplit" class="edit-split">
+                            <div class="edit-pane">
+                                <header>Markdown</header>
+                                <textarea id="markdownEditor" class="markdown-editor"></textarea>
+                                <div class="toolbar-container">
+                                    <div id="markdownToolbar" class="markdown-toolbar">
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('**', '**', 'жирный текст')"><b>B</b></button>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('*', '*', 'курсив')"><i>I</i></button>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('~~', '~~', 'зачеркнутый')"><s>S</s></button>
+                                        <div class="toolbar-separator"></div>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('# ', '', 'Заголовок 1', true)">H1</button>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('## ', '', 'Заголовок 2', true)">H2</button>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('### ', '', 'Заголовок 3', true)">H3</button>
+                                        <div class="toolbar-separator"></div>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('> ', '', 'Цитата', true)">”</button>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('`', '`', 'код')">`</button>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('```\\n', '\\n```', 'блок кода')">```</button>
+                                        <div class="toolbar-separator"></div>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('* ', '', 'Элемент списка', true)">●</button>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('1. ', '', 'Элемент списка', true)">1.</button>
+                                        <button class="toolbar-btn" onclick="toggleMarkdownFormatting('[', '](https://)', 'текст ссылки')">🔗</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="edit-pane">
+                                <header>Предпросмотр</header>
+                                <div id="livePreview" class="live-preview markdown-content"></div>
+                            </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+            <div id="saveDiffModal" class="modal-backdrop">
+                <div class="modal">
+                    <div class="modal-header">
+                        <div>Сравнение версий</div>
+                        <div class="diff-view-toggle">
+                            <button id="toggleRawDiff" class="active" onclick="setDiffView('raw')">Сырой diff</button>
+                            <button id="toggleRenderedDiff" onclick="setDiffView('rendered')">Предпросмотр</button>
+                        </div>
+                    </div>
+                    <div class="modal-body">
+                        <div id="rawDiffBlock">
+                            <div class="raw-diff-table" id="saveDiffRawTable"></div>
+                        </div>
+                        <div id="renderedDiffBlock" style="display:none;">
+                            <div class="diff-grid">
+                                <div class="diff-column">
+                                    <h3>До</h3>
+                                    <div class="diff-rendered markdown-content" id="saveDiffBeforeRendered"></div>
+                                </div>
+                                <div class="diff-column">
+                                    <h3>После</h3>
+                                    <div class="diff-rendered markdown-content" id="saveDiffAfterRendered"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <div style="display:flex; gap:8px;">
+                            <button class="toolbar-btn" onclick="cancelSaveDiff()">Отменить</button>
+                        </div>
+                        <button class="toolbar-btn" style="background-color:#4caf50; border-color:#4caf50;" onclick="confirmSaveDiff()">Сохранить</button>
                     </div>
                 </div>
             </div>
@@ -551,18 +872,40 @@
                 let currentFile = null;
                 let rawContent = '';
                 let isEditing = false;
+                let beforeSaveSnapshot = '';
+                let pendingSaveContent = '';
+                const md = window.markdownit({
+                    html: true,
+                    linkify: true,
+                    typographer: true,
+                    highlight: function (str, lang) {
+                        if (lang && hljs.getLanguage(lang)) {
+                            try {
+                                return hljs.highlight(str, { language: lang }).value;
+                            } catch (__) {}
+                        }
+                        return ''; // use external default escaping
+                    }
+                });
 
-                // Загрузка файла
+                let dmp = null;
+                try {
+                    dmp = new diff_match_patch();
+                } catch (e) {
+                    console.error('diff_match_patch не инициализирован, diff-подсветка отключена', e);
+                }
+
+                // File upload
                 document.getElementById('fileInput').addEventListener('change', async function(e) {
                     const file = e.target.files[0];
                     if (!file) return;
                     await uploadWithConflictHandling(file);
 
-                    // Сбрасываем input
+                    // Reset input after upload
                     e.target.value = '';
                 });
 
-                // Функция загрузки с обработкой конфликтов
+                // Upload with conflict handling
                 async function uploadWithConflictHandling(file, newFilename = null) {
                     const formData = new FormData();
                     formData.append('file', file);
@@ -596,7 +939,7 @@
         }
     }
 
-    // Загрузка списка файлов
+    // Load file list
     async function loadFileList() {
         try {
             const response = await fetch('/api/files');
@@ -620,7 +963,7 @@
     }
 }
 
-// Переименование файла
+// Rename file
 async function renameFile(filename, event) {
     event.stopPropagation();
     const newName = prompt(`Переименовать файл "${filename}":`, filename.replace('.md', ''));
@@ -654,26 +997,26 @@ alert('Ошибка при переименовании файла: ' + error.me
 }
 }
 
-// Загрузка содержимого файла
+// Load file content
 async function loadFile(filename) {
 
-    // Если мы в режиме редактирования, выходим из него перед загрузкой нового файла
+    // Exit edit mode if a new file is being opened
     if (isEditing) {
-        toggleEditMode(true); // Выйти из режима редактирования без сохранения
+        toggleEditMode(true); // Exit edit mode without saving
     }
     try {
         const response = await fetch(`/api/file/${filename}`);
         const data = await response.json();
         if (response.ok) {
             currentFile = filename;
-            rawContent = data.raw_content; // Сохраняем исходный код
+            rawContent = data.raw_content; // Preserve original content
             document.getElementById('contentTitle').textContent = data.filename;
             const contentBody = document.getElementById('contentBody');
 
-            // Находим существующие элементы или создаем их, чтобы не дублировать
-            let viewer = contentBody.querySelector('.markdown-content');
+            let viewer = contentBody.querySelector('#mainMarkdownContent');
             if (!viewer) {
                 viewer = document.createElement('div');
+                viewer.id = 'mainMarkdownContent';
                 viewer.className = 'markdown-content';
                 contentBody.prepend(viewer);
             }
@@ -681,8 +1024,8 @@ async function loadFile(filename) {
             let editor = contentBody.querySelector('#markdownEditor');
             editor.value = rawContent;
 
-            // Показываем кнопку редактирования
             document.getElementById('editToggleBtn').style.display = 'block';
+            showWelcome(false);
             highlightCode();
             addCopyButtons();
             loadFileList();
@@ -694,53 +1037,57 @@ alert('Ошибка при загрузке файла: ' + error.message);
 }
 }
 
-// Переключение режима редактирования
+// Toggle edit mode
 function toggleEditMode(forceExit = false) {
     const editor = document.getElementById('markdownEditor');
-    const viewer = document.querySelector('.markdown-content');
+    const viewer = getMainViewer();
     const toggleBtn = document.getElementById('editToggleBtn');
     const toolbar = document.getElementById('markdownToolbar');
+    const split = document.getElementById('editSplit');
+    const livePreview = document.getElementById('livePreview');
+    const cancelBtn = document.getElementById('cancelEditBtn');
+    if (!currentFile) return;
+
     if (forceExit) {
         isEditing = false;
-    } else {
-    isEditing = !isEditing;
+        split.classList.remove('visible');
+        viewer.style.display = 'block';
+        toolbar.classList.add('hidden');
+        toggleBtn.textContent = 'Редактировать';
+        toggleBtn.classList.remove('editing');
+        cancelBtn.style.display = 'none';
+        pendingSaveContent = '';
+        return;
+    }
+
+    // Enter edit mode
+    if (!isEditing) {
+        isEditing = true;
+        beforeSaveSnapshot = rawContent;
+        split.classList.add('visible');
+        viewer.style.display = 'none';
+        editor.value = rawContent;
+        renderLivePreview(editor.value, livePreview);
+        toolbar.classList.remove('hidden');
+        editor.focus();
+        toggleBtn.textContent = 'Сохранить';
+        toggleBtn.classList.add('editing');
+        cancelBtn.style.display = 'block';
+        return;
+    }
+
+    // Already editing: show diff before saving
+    openSaveDiffPreview();
 }
-if (isEditing) {
 
-    // Вход в режим редактирования
-    viewer.style.display = 'none';
-    editor.style.display = 'block';
-    toolbar.classList.add('visible');
-
-    // Скролл к началу контейнера, чтобы избежать прыжка вниз
-    editor.parentElement.scrollTop = 0;
-    editor.focus();
-    toggleBtn.textContent = 'Сохранить';
-    toggleBtn.classList.add('editing');
-} else {
-
-// Выход из режима редактирования
-if (!forceExit) {
-
-    // Сохраняем файл, если не просто выходим
-    saveFile();
-}
-viewer.style.display = 'block';
-editor.style.display = 'none';
-toolbar.classList.remove('visible');
-toggleBtn.textContent = 'Редактировать';
-toggleBtn.classList.remove('editing');
-}
-}
-
-// Применение и снятие стилей Markdown
+// Apply or remove markdown formatting
 function toggleMarkdownFormatting(prefix, suffix, placeholder, isBlock = false) {
     const editor = document.getElementById('markdownEditor');
     const start = editor.selectionStart;
     const end = editor.selectionEnd;
     let originalSelection = editor.value.substring(start, end);
 
-    // Логика для блочных элементов (заголовки, цитаты, списки)
+    // Block-level formatting (headings, quotes, lists)
     if (isBlock) {
         const lineStart = editor.value.lastIndexOf('\n', start - 1) + 1;
         let lineEnd = editor.value.indexOf('\n', start);
@@ -749,17 +1096,16 @@ function toggleMarkdownFormatting(prefix, suffix, placeholder, isBlock = false) 
         }
         const originalLine = editor.value.substring(lineStart, lineEnd);
 
-        // Проверяем, отформатирована ли уже строка
         if (originalLine.trim().startsWith(prefix)) {
 
-            // Снимаем форматирование
-            const firstCharIndex = originalLine.search(/\S/); // Находим индекс первого непробельного символа
+            // Remove block formatting
+            const firstCharIndex = originalLine.search(/\S/);
             const newLine = originalLine.substring(0, firstCharIndex) + originalLine.substring(firstCharIndex + prefix.length);
             editor.setRangeText(newLine, lineStart, lineEnd);
             editor.setSelectionRange(lineStart, lineStart + newLine.length);
         } else {
 
-        // Применяем форматирование
+        // Apply block formatting
         editor.setRangeText(prefix, lineStart, lineStart);
         editor.setSelectionRange(lineStart + prefix.length, lineStart + prefix.length + originalLine.length);
     }
@@ -767,24 +1113,24 @@ function toggleMarkdownFormatting(prefix, suffix, placeholder, isBlock = false) 
     return;
 }
 
-// Логика для оборачивающих элементов (жирный, курсив и т.д.)
+// Inline wrappers (bold, italic, etc.)
 const beforeSelection = editor.value.substring(start - prefix.length, start);
 const afterSelection = editor.value.substring(end, end + suffix.length);
 if (beforeSelection === prefix && afterSelection === suffix) {
 
-    // Снимаем форматирование (даже если выделение пустое)
+    // Remove formatting even if selection is empty
     const unwrappedText = editor.value.substring(start, end);
     editor.setRangeText(unwrappedText, start - prefix.length, end + suffix.length);
     const newCursorPos = start - prefix.length;
     editor.setSelectionRange(newCursorPos, newCursorPos + unwrappedText.length);
 } else {
 
-// Применяем форматирование
+// Apply formatting
 const textToWrap = originalSelection.length > 0 ? originalSelection : placeholder;
 const newText = prefix + textToWrap + suffix;
 editor.setRangeText(newText, start, end);
 
-// Выделяем внутренний текст, чтобы можно было сразу его изменить или снять форматирование
+// Select inner text for easy toggle/edit
 const newStart = start + prefix.length;
 const newEnd = newStart + textToWrap.length;
 editor.setSelectionRange(newStart, newEnd);
@@ -792,37 +1138,36 @@ editor.setSelectionRange(newStart, newEnd);
 editor.focus();
 }
 
-// Сохранение файла
-async function saveFile() {
-    if (!currentFile) return;
-    const newContent = document.getElementById('markdownEditor').value;
-    try {
-        const response = await fetch(`/api/file/${currentFile}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ content: newContent })
-        });
-        const data = await response.json();
-        if (response.ok) {
-
-            // Перезагружаем файл, чтобы увидеть обновленный контент
-            loadFile(currentFile);
-        } else {
-        alert('Ошибка сохранения: ' + data.error);
-    }
-} catch (error) {
-alert('Ошибка при сохранении файла: ' + error.message);
-}
-}
-
-// Подсветка синтаксиса кода
+// Syntax highlighting
 function highlightCode() {
     const codeBlocks = document.querySelectorAll('.markdown-content pre code');
     codeBlocks.forEach((block) => {
         hljs.highlightElement(block);
     });
+}
+
+function highlightCodeIn(container) {
+    const codeBlocks = container.querySelectorAll('pre code');
+    codeBlocks.forEach((block) => {
+        hljs.highlightElement(block);
+    });
+}
+
+function getMainViewer() {
+    return document.getElementById('mainMarkdownContent');
+}
+
+function showWelcome(visible) {
+    const welcome = document.querySelector('.welcome-message');
+    if (!welcome) return;
+    welcome.style.display = visible ? 'block' : 'none';
+}
+
+function renderLivePreview(text = '', target = null) {
+    const preview = target || document.getElementById('livePreview');
+    if (!preview) return;
+    preview.innerHTML = md.render(text);
+    highlightCodeIn(preview);
 }
 
 // Добавление кнопок копирования к блокам кода
@@ -891,13 +1236,15 @@ async function deleteFile(filename, event) {
             if (currentFile === filename) {
                 currentFile = null;
                 document.getElementById('contentTitle').textContent = 'Выберите файл для просмотра';
-                document.getElementById('contentBody').innerHTML = `
-                <div class="welcome-message">
-                <h2>Добро пожаловать!</h2>
-                <p>Загрузите .md файл, чтобы начать чтение</p>
-                </div>
-                `;
+                const viewer = getMainViewer();
+                if (viewer) viewer.innerHTML = '';
+                showWelcome(true);
                 document.getElementById('editToggleBtn').style.display = 'none';
+                const split = document.getElementById('editSplit');
+                const toolbar = document.getElementById('markdownToolbar');
+                split.classList.remove('visible');
+                toolbar.classList.add('hidden');
+                isEditing = false;
             }
             loadFileList();
         } else {
@@ -907,6 +1254,248 @@ async function deleteFile(filename, event) {
 alert('Ошибка при удалении файла: ' + error.message);
 }
 }
+
+async function showSaveDiff(beforeRaw, afterRaw) {
+    try {
+        const response = await fetch('/api/diff/preview', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                before_content: beforeRaw,
+                after_content: afterRaw,
+                before_name: `${currentFile} (до)`,
+                after_name: `${currentFile} (после)`
+            })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            console.error('Ошибка diff:', data.error);
+            return;
+        }
+
+        document.getElementById('saveDiffRawTable').innerHTML = data.raw_diff_html;
+        const beforeRendered = document.getElementById('saveDiffBeforeRendered');
+        const afterRendered = document.getElementById('saveDiffAfterRendered');
+        beforeRendered.innerHTML = renderDiffSide(data.before.raw_content, data.after.raw_content, 'before');
+        afterRendered.innerHTML = renderDiffSide(data.before.raw_content, data.after.raw_content, 'after');
+        highlightCodeIn(beforeRendered);
+        highlightCodeIn(afterRendered);
+        cleanDiffTable(document.getElementById('saveDiffRawTable'));
+
+        setDiffView('raw');
+        document.getElementById('saveDiffModal').classList.add('visible');
+        setupRenderedDiffScrollSync();
+    } catch (error) {
+        console.error('Ошибка при формировании diff:', error);
+    }
+}
+
+function setDiffView(view) {
+    const rawBlock = document.getElementById('rawDiffBlock');
+    const renderedBlock = document.getElementById('renderedDiffBlock');
+    const rawBtn = document.getElementById('toggleRawDiff');
+    const rendBtn = document.getElementById('toggleRenderedDiff');
+    if (view === 'raw') {
+        rawBlock.style.display = 'block';
+        renderedBlock.style.display = 'none';
+        rawBtn.classList.add('active');
+        rendBtn.classList.remove('active');
+    } else {
+        rawBlock.style.display = 'none';
+        renderedBlock.style.display = 'block';
+        rawBtn.classList.remove('active');
+        rendBtn.classList.add('active');
+    }
+}
+
+function closeSaveDiffModal() {
+    document.getElementById('saveDiffModal').classList.remove('visible');
+}
+
+async function openSaveDiffPreview() {
+    const editor = document.getElementById('markdownEditor');
+    const newContent = editor.value;
+    pendingSaveContent = newContent;
+    await showSaveDiff(beforeSaveSnapshot, newContent);
+}
+
+async function confirmSaveDiff() {
+    await persistSave(pendingSaveContent);
+    closeSaveDiffModal();
+}
+
+function cancelSaveDiff() {
+    closeSaveDiffModal();
+    pendingSaveContent = '';
+    // stay in edit mode so user can continue typing
+}
+
+function cancelEdit() {
+    if (!isEditing) return;
+    const viewer = getMainViewer();
+    const split = document.getElementById('editSplit');
+    const toolbar = document.getElementById('markdownToolbar');
+    const toggleBtn = document.getElementById('editToggleBtn');
+    const editor = document.getElementById('markdownEditor');
+    const cancelBtn = document.getElementById('cancelEditBtn');
+    // revert to content from edit start
+    editor.value = beforeSaveSnapshot;
+    renderLivePreview(editor.value);
+    isEditing = false;
+    split.classList.remove('visible');
+    viewer.style.display = 'block';
+    toolbar.classList.add('hidden');
+    toggleBtn.textContent = 'Редактировать';
+    toggleBtn.classList.remove('editing');
+    cancelBtn.style.display = 'none';
+    pendingSaveContent = '';
+}
+
+async function persistSave(newContent) {
+    if (!currentFile) return;
+    try {
+        const response = await fetch(`/api/file/${currentFile}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ content: newContent })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            rawContent = newContent;
+            isEditing = false;
+            const viewer = getMainViewer();
+            const split = document.getElementById('editSplit');
+            const toolbar = document.getElementById('markdownToolbar');
+            const toggleBtn = document.getElementById('editToggleBtn');
+            const cancelBtn = document.getElementById('cancelEditBtn');
+            split.classList.remove('visible');
+            viewer.style.display = 'block';
+            toolbar.classList.add('hidden');
+            toggleBtn.textContent = 'Редактировать';
+            toggleBtn.classList.remove('editing');
+            cancelBtn.style.display = 'none';
+            pendingSaveContent = '';
+            await loadFile(currentFile);
+        } else {
+            alert('Ошибка сохранения: ' + data.error);
+        }
+    } catch (error) {
+        alert('Ошибка при сохранении файла: ' + error.message);
+    }
+}
+
+function cleanDiffTable(container) {
+    if (!container) return;
+    const anchors = container.querySelectorAll('a');
+    anchors.forEach(a => {
+        const span = document.createElement('span');
+        span.textContent = a.textContent;
+        a.replaceWith(span);
+    });
+}
+
+function renderDiffSide(rawA, rawB, mode) {
+    // mode: 'before' or 'after'
+    if (!dmp) {
+        // fallback: просто рендер без подсветки изменений
+        return md.render(mode === 'before' ? rawA : rawB);
+    }
+    const diffs = dmp.diff_main(rawA, rawB);
+    dmp.diff_cleanupSemantic(diffs);
+
+    const normalized = [];
+    for (let i = 0; i < diffs.length; i++) {
+        const [op, text] = diffs[i];
+        const next = diffs[i + 1];
+        if (op === -1 && next && next[0] === 1) {
+            normalized.push(['chgBefore', text]);
+            normalized.push(['chgAfter', next[1]]);
+            i++;
+            continue;
+        }
+        if (op === 1 && next && next[0] === -1) {
+            normalized.push(['chgBefore', next[1]]);
+            normalized.push(['chgAfter', text]);
+            i++;
+            continue;
+        }
+        if (op === 0) normalized.push(['eq', text]);
+        else if (op === -1) normalized.push(['del', text]);
+        else if (op === 1) normalized.push(['add', text]);
+    }
+
+    function wrapTokens(text, cls) {
+        if (!cls) return md.utils.escapeHtml(text);
+        const trimmed = text.trimStart();
+        // Не вмешиваемся в кодовые блоки/инлайн-код, чтобы не ломать подсветку
+        if (trimmed.startsWith('```') || trimmed.startsWith('`')) {
+            return md.utils.escapeHtml(text);
+        }
+        return `<mark class="${cls}">${md.utils.escapeHtml(text)}</mark>`;
+    }
+
+    const parts = normalized.map(([op, text]) => {
+        let cls = '';
+        if (mode === 'before') {
+            if (op === 'del') cls = 'diff-mark-sub';
+            else if (op === 'chgBefore') cls = 'diff-mark-chg';
+        } else {
+            if (op === 'add') cls = 'diff-mark-add';
+            else if (op === 'chgAfter') cls = 'diff-mark-chg';
+        }
+        if (cls === '' && (op === 'add' || op === 'del' || op === 'chgBefore' || op === 'chgAfter')) {
+            // скрываем нерелевантное для данной стороны
+            return '';
+        }
+        return wrapTokens(text, cls);
+    }).join('');
+
+    return md.render(parts);
+}
+
+// Подписка на живой предпросмотр
+document.getElementById('markdownEditor').addEventListener('input', (e) => {
+    renderLivePreview(e.target.value);
+});
+
+// Синхронизация скролла в режиме редактирования
+let editSyncLock = false;
+function syncEditScroll(source, target) {
+    if (editSyncLock) return;
+    editSyncLock = true;
+    const ratio = source.scrollTop / Math.max(1, source.scrollHeight - source.clientHeight);
+    target.scrollTop = ratio * Math.max(1, target.scrollHeight - target.clientHeight);
+    editSyncLock = false;
+}
+const editorEl = document.getElementById('markdownEditor');
+const livePreviewEl = document.getElementById('livePreview');
+editorEl.addEventListener('scroll', () => syncEditScroll(editorEl, livePreviewEl));
+livePreviewEl.addEventListener('scroll', () => syncEditScroll(livePreviewEl, editorEl));
+
+// Синхронизация скролла в rendered diff
+let renderedDiffSyncLock = false;
+function setupRenderedDiffScrollSync() {
+    const before = document.getElementById('saveDiffBeforeRendered');
+    const after = document.getElementById('saveDiffAfterRendered');
+    if (!before || !after) return;
+    before.addEventListener('scroll', () => syncRenderedDiff(before, after));
+    after.addEventListener('scroll', () => syncRenderedDiff(after, before));
+}
+function syncRenderedDiff(source, target) {
+    if (renderedDiffSyncLock) return;
+    renderedDiffSyncLock = true;
+    const ratio = source.scrollTop / Math.max(1, source.scrollHeight - source.clientHeight);
+    target.scrollTop = ratio * Math.max(1, target.scrollHeight - target.clientHeight);
+    renderedDiffSyncLock = false;
+}
+
+// Изначально скрываем тулбар
+document.getElementById('markdownToolbar').classList.add('hidden');
+document.getElementById('cancelEditBtn').style.display = 'none';
 
 // Загружаем список файлов при загрузке страницы
 loadFileList();
