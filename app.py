@@ -10,7 +10,16 @@ def create_app() -> Flask:
     """Application factory with modular route registration."""
     app = Flask(__name__)
     app.config.from_object(Config)
-    ensure_upload_dir(app.config['UPLOAD_FOLDER'])
+    
+    # Get upload directory from config
+    upload_folder = os.path.abspath(app.config['UPLOAD_FOLDER'])
+    
+    # Create directory if it doesn't exist
+    # For existing directories, verify it's actually a directory
+    if not os.path.exists(upload_folder):
+        ensure_upload_dir(upload_folder)
+    elif not os.path.isdir(upload_folder):
+        raise ValueError(f"Specified path '{upload_folder}' is not a directory")
 
     app.register_blueprint(api_bp)
 
