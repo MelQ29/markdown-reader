@@ -169,7 +169,7 @@ function toggleEditMode(forceExit = false) {
         toolbar.classList.add('hidden');
         toggleBtn.textContent = 'Редактировать';
         toggleBtn.classList.remove('editing');
-        cancelBtn.style.display = 'none';
+        cancelBtn.classList.add('is-hidden');
         pendingSaveContent = '';
         return;
     }
@@ -185,7 +185,7 @@ function toggleEditMode(forceExit = false) {
         editor.focus();
         toggleBtn.textContent = 'Сохранить';
         toggleBtn.classList.add('editing');
-        cancelBtn.style.display = 'block';
+        cancelBtn.classList.remove('is-hidden');
         return;
     }
 
@@ -394,13 +394,13 @@ function setDiffView(view) {
     const rawBtn = document.getElementById('toggleRawDiff');
     const rendBtn = document.getElementById('toggleRenderedDiff');
     if (view === 'raw') {
-        rawBlock.style.display = 'block';
-        renderedBlock.style.display = 'none';
+        rawBlock.classList.remove('is-hidden');
+        renderedBlock.classList.add('is-hidden');
         rawBtn.classList.add('active');
         rendBtn.classList.remove('active');
     } else {
-        rawBlock.style.display = 'none';
-        renderedBlock.style.display = 'block';
+        rawBlock.classList.add('is-hidden');
+        renderedBlock.classList.remove('is-hidden');
         rawBtn.classList.remove('active');
         rendBtn.classList.add('active');
     }
@@ -443,7 +443,7 @@ function cancelEdit() {
     toolbar.classList.add('hidden');
     toggleBtn.textContent = 'Редактировать';
     toggleBtn.classList.remove('editing');
-    cancelBtn.style.display = 'none';
+    cancelBtn.classList.add('is-hidden');
     pendingSaveContent = '';
 }
 
@@ -471,7 +471,7 @@ async function persistSave(newContent) {
             toolbar.classList.add('hidden');
             toggleBtn.textContent = 'Редактировать';
             toggleBtn.classList.remove('editing');
-            cancelBtn.style.display = 'none';
+            cancelBtn.classList.add('is-hidden');
             pendingSaveContent = '';
             await loadFile(currentFile);
         } else {
@@ -584,7 +584,7 @@ function syncRenderedDiff(source, target) {
 }
 
 document.getElementById('markdownToolbar').classList.add('hidden');
-document.getElementById('cancelEditBtn').style.display = 'none';
+document.getElementById('cancelEditBtn').classList.add('is-hidden');
 
 loadFileList();
 
