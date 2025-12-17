@@ -120,12 +120,12 @@ def rename_file_route(filename):
         return jsonify({'error': 'Файл для переименования не найден'}), 404
 
     data = request.get_json() or {}
-    new_name = data.get('newName')
+    new_name_raw = data.get('newName')
+    new_name = sanitize_filename(new_name_raw or '')
 
     if not new_name:
         return jsonify({'error': 'Новое имя не указано'}), 400
 
-    new_name = sanitize_filename(new_name)
     new_filepath = build_filepath(upload_folder, new_name)
 
     if os.path.exists(new_filepath):

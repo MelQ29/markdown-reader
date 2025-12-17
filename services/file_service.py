@@ -12,9 +12,15 @@ def ensure_upload_dir(upload_folder: str) -> None:
 
 def sanitize_filename(filename: str, ensure_md: bool = True) -> str:
     """Sanitize filename and optionally enforce .md extension."""
-    cleaned = secure_filename(filename)
+    target = filename
+    if ensure_md and target and not target.lower().endswith('.md'):
+        target += '.md'
+
+    cleaned = secure_filename(target)
+
     if ensure_md and cleaned and not cleaned.lower().endswith('.md'):
         cleaned += '.md'
+
     return cleaned
 
 
