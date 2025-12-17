@@ -144,11 +144,12 @@ def diff_files():
     before_name = request.args.get('before', '')
     after_name = request.args.get('after', '')
 
-    if not before_name or not after_name:
-        return jsonify({'error': 'Не указаны оба файла для сравнения'}), 400
-
     before_name = sanitize_filename(before_name)
     after_name = sanitize_filename(after_name)
+
+    # Validate after sanitization to catch inputs that collapse to empty names
+    if not before_name or not after_name:
+        return jsonify({'error': 'Не указаны оба файла для сравнения'}), 400
 
     upload_folder = current_app.config['UPLOAD_FOLDER']
     before_path = build_filepath(upload_folder, before_name)
