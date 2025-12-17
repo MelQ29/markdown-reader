@@ -190,6 +190,12 @@ body {
     display: none;
 }
 
+.edit-toggle-btn.cancel-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .edit-toggle-btn:hover {
     background-color: #357abd;
 }
