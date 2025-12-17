@@ -138,15 +138,21 @@ python app.py
 
 ```
 md-reader/
-├── app.py              # Основное Flask приложение
+├── app.py              # Точка входа (app factory + регистрация blueprints)
+├── config.py           # Конфигурация Flask и ограничений загрузки
+├── routes/
+│   └── api.py          # API endpoints, сгруппированные в blueprint
+├── services/           # Бизнес-логика и утилиты
+│   ├── diff_service.py
+│   ├── file_service.py
+│   └── markdown_service.py
 ├── templates/
 │   └── index.html      # HTML шаблон
 ├── uploads/            # Папка для загруженных файлов (создается автоматически)
-├── venv/               # Виртуальное окружение Python (создается при установке)
 ├── requirements.txt    # Зависимости Python
-├── setup.sh           # Скрипт автоматической установки (Linux/macOS)
-├── run.sh             # Скрипт автоматического запуска (Linux/macOS)
-├── setup.bat          # Скрипт автоматической установки (Windows)
-├── run.bat            # Скрипт автоматического запуска (Windows)
-└── README.md          # Этот файл
+├── setup.sh            # Скрипт автоматической установки (Linux/macOS)
+├── run.sh              # Скрипт автоматического запуска (Linux/macOS)
+├── setup.bat           # Скрипт автоматической установки (Windows)
+├── run.bat             # Скрипт автоматического запуска (Windows)
+└── README.md           # Этот файл
 ```
