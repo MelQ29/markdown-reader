@@ -1,0 +1,757 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.is-hidden {
+    display: none !important;
+}
+
+/* Боковая панель */
+.sidebar {
+    width: 300px;
+    background-color: #252525;
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid #333;
+}
+
+.sidebar-header h1 {
+    font-size: 24px;
+    color: #fff;
+    margin-bottom: 15px;
+}
+
+.upload-section {
+    margin-bottom: 15px;
+}
+
+.file-input-wrapper {
+    position: relative;
+    overflow: hidden;
+    display: inline-block;
+    width: 100%;
+}
+
+.file-input-wrapper input[type=file] {
+    position: absolute;
+    left: -9999px;
+}
+
+.file-input-label {
+    display: block;
+    padding: 10px 15px;
+    background-color: #ff5555;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.3s;
+    font-size: 14px;
+}
+
+.file-input-label:hover {
+    background-color: #ee4444;
+}
+
+.file-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+.file-item {
+    padding: 12px;
+    margin-bottom: 8px;
+    background-color: #2a2a2a;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.file-item:hover {
+    background-color: #333;
+}
+
+.file-item.active {
+    background-color: #ff5555;
+    color: white;
+}
+
+.file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+.file-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.rename-btn {
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.2s;
+}
+
+.rename-btn:hover {
+    background-color: #357abd;
+}
+
+.delete-btn {
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.2s;
+}
+
+.delete-btn:hover {
+    background-color: #cc0000;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+    font-size: 14px;
+}
+
+/* Основная область контента */
+.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.content-header {
+    padding: 20px;
+    border-bottom: 1px solid #333;
+    background-color: #252525;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.content-header h2 {
+    font-size: 20px;
+    color: #fff;
+}
+
+.edit-toggle-btn {
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+    display: none;
+}
+
+.edit-toggle-btn:hover {
+    background-color: #357abd;
+}
+
+.edit-toggle-btn.editing {
+    background-color: #4caf50;
+}
+
+.edit-toggle-btn.editing:hover {
+    background-color: #45a049;
+}
+
+.content-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 40px;
+    background-color: #1a1a1a;
+    position: relative;
+}
+
+.content-body::-webkit-scrollbar {
+    width: 10px;
+}
+
+.content-body::-webkit-scrollbar-track {
+    background: #252525;
+}
+
+.content-body::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 5px;
+}
+
+.content-body::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.file-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.file-list::-webkit-scrollbar-track {
+    background: #252525;
+}
+
+.file-list::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 5px;
+}
+
+.file-list::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Стили для markdown контента */
+.markdown-content {
+    max-width: 900px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    color: #fff;
+    margin-top: 24px;
+    margin-bottom: 16px;
+}
+
+.markdown-content h1 {
+    font-size: 32px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+}
+
+.markdown-content h2 {
+    font-size: 24px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 8px;
+}
+
+.markdown-content h3 {
+    font-size: 20px;
+}
+
+.markdown-content p {
+    margin-bottom: 16px;
+}
+
+.markdown-content code {
+    background-color: #2a2a2a;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    color: #ff6b6b;
+}
+
+.markdown-content pre {
+    background-color: #2a2a2a;
+    padding: 16px;
+    border-radius: 5px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+    border: 1px solid #333;
+    position: relative;
+}
+
+.markdown-content pre code {
+    background-color: transparent;
+    padding: 0;
+    color: #e0e0e0;
+    display: block;
+}
+
+/* Стили для highlight.js */
+.markdown-content pre code.hljs {
+    padding: 0;
+    background: transparent;
+}
+
+.markdown-content pre.hljs {
+    background-color: #2a2a2a;
+    padding: 16px;
+}
+
+.code-block-wrapper {
+    position: relative;
+    margin-bottom: 16px;
+}
+
+.copy-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background-color: #ff5555;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.2s, background-color 0.2s;
+    z-index: 10;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.code-block-wrapper:hover .copy-button {
+    opacity: 1;
+}
+
+.copy-button:hover {
+    background-color: #ee4444;
+}
+
+.copy-button:active {
+    background-color: #dd3333;
+}
+
+.copy-button.copied {
+    background-color: #4caf50;
+}
+
+.copy-button.copied::after {
+    content: ' ✓';
+}
+
+.markdown-content blockquote {
+    border-left: 4px solid #ff5555;
+    padding-left: 16px;
+    margin: 16px 0;
+    color: #aaa;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+    margin-left: 24px;
+    margin-bottom: 16px;
+}
+
+.markdown-content li {
+    margin-bottom: 8px;
+}
+
+.markdown-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.markdown-content table th,
+.markdown-content table td {
+    border: 1px solid #333;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.markdown-content table th {
+    background-color: #2a2a2a;
+    font-weight: bold;
+}
+
+.markdown-content a {
+    color: #ff5555;
+    text-decoration: none;
+}
+
+.markdown-content a:hover {
+    text-decoration: underline;
+}
+
+.markdown-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 5px;
+    margin: 16px 0;
+}
+
+.welcome-message {
+    text-align: center;
+    color: #666;
+    padding: 60px 20px;
+}
+
+.welcome-message h2 {
+    font-size: 28px;
+    margin-bottom: 10px;
+    color: #888;
+}
+
+.welcome-message p {
+    font-size: 16px;
+}
+
+.edit-split {
+    display: none;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    height: calc(100vh - 160px);
+}
+
+.edit-split.visible {
+    display: grid;
+}
+
+.edit-pane {
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.edit-pane header {
+    padding: 10px 14px;
+    border-bottom: 1px solid #333;
+    background-color: #252525;
+    font-weight: 600;
+    color: #fff;
+}
+
+.live-preview {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+    background-color: #1a1a1a;
+}
+
+.markdown-editor {
+    position: relative;
+    flex: 1;
+    height: auto;
+    display: block;
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    border: none;
+    padding: 40px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    resize: none;
+    outline: none;
+}
+
+.toolbar-container {
+    border-top: 1px solid #333;
+    background-color: #252525;
+}
+
+.markdown-toolbar {
+    position: relative;
+    padding: 8px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    border-top: none;
+    bottom: auto;
+    left: auto;
+}
+
+.markdown-toolbar.hidden {
+    display: none;
+}
+
+.toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background-color: #444;
+    color: white;
+    border: 1px solid #555;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1.2;
+    transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
+    min-height: 32px;
+}
+
+.toolbar-btn:hover {
+    background-color: #555;
+    border-color: #666;
+}
+
+.toolbar-btn:active {
+    background-color: #3a3a3a;
+    border-color: #4a4a4a;
+}
+
+.toolbar-btn:focus-visible {
+    outline: 2px solid #ff5555;
+    outline-offset: 2px;
+}
+
+.toolbar-btn--primary {
+    background-color: #4caf50;
+    border-color: #4caf50;
+}
+
+.toolbar-btn--primary:hover {
+    background-color: #43a047;
+    border-color: #3d9141;
+}
+
+.toolbar-btn--primary:active {
+    background-color: #3a8a3a;
+    border-color: #337c34;
+}
+
+/* Diff modal after save */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.modal-backdrop.visible {
+    display: flex;
+}
+
+.modal {
+    background-color: #1f1f1f;
+    border: 1px solid #333;
+    border-radius: 10px;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+.modal-header, .modal-footer {
+    padding: 12px 16px;
+    border-bottom: 1px solid #333;
+    background-color: #252525;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.modal-footer {
+    border-top: 1px solid #333;
+    border-bottom: none;
+}
+
+.modal-body {
+    padding: 12px 16px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    flex: 1;
+}
+
+.diff-view-toggle {
+    display: flex;
+    gap: 8px;
+}
+
+.diff-view-toggle button {
+    background-color: #333;
+    color: #e0e0e0;
+    border: 1px solid #444;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.diff-view-toggle button.active {
+    background-color: #ff5555;
+    border-color: #ff5555;
+}
+
+.diff-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    flex: 1;
+    min-height: 50vh;
+    align-items: stretch;
+}
+
+.diff-column {
+    background-color: #252525;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.diff-column h3 {
+    margin-bottom: 10px;
+    color: #fff;
+    font-size: 16px;
+}
+
+.diff-raw {
+    max-height: 240px;
+    overflow: auto;
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    margin-bottom: 12px;
+    white-space: pre-wrap;
+}
+
+.diff-rendered {
+    flex: 1;
+    overflow: auto;
+    padding: 10px;
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 4px;
+}
+
+.raw-diff-table {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid #333;
+    border-radius: 4px;
+    min-height: 200px;
+}
+
+.cancel-edit-btn {
+    background-color: #555;
+}
+
+.cancel-edit-btn:hover {
+    background-color: #444;
+}
+
+.raw-diff-table table.diff {
+    width: 100%;
+    table-layout: auto;
+    border-collapse: collapse;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+}
+
+.raw-diff-table .diff_header {
+    background: #2a2a2a;
+    color: #e0e0e0;
+}
+
+.raw-diff-table .diff_next {
+    display: none;
+}
+
+.raw-diff-table td, .raw-diff-table th {
+    border: 1px solid #333;
+    padding: 4px 6px;
+    color: #e0e0e0;
+    white-space: pre;
+    word-break: normal;
+    vertical-align: top;
+}
+
+.raw-diff-table .diff_next, .raw-diff-table .diff_header {
+    background: #2a2a2a;
+}
+
+.raw-diff-table .diff_add {
+    background: rgba(76, 255, 120, 0.35);
+}
+
+.raw-diff-table .diff_chg {
+    background: rgba(255, 221, 87, 0.35);
+}
+
+.raw-diff-table .diff_sub {
+    background: rgba(255, 110, 110, 0.35);
+}
+
+.raw-diff-table a {
+    color: inherit;
+    text-decoration: none;
+    pointer-events: none;
+}
+
+.diff-mark-add {
+    background: rgba(76, 255, 120, 0.35) !important;
+    color: inherit;
+}
+
+.diff-mark-sub {
+    background: rgba(255, 110, 110, 0.35) !important;
+    color: inherit;
+}
+
+.diff-mark-chg {
+    background: rgba(255, 221, 87, 0.35) !important;
+    color: inherit;
+}
+
+/* Сбрасываем фон у mark внутри рендеренного diff */
+.diff-rendered mark {
+    background: transparent !important;
+    color: inherit;
+    padding: 0;
+}
+

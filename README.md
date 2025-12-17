@@ -142,6 +142,9 @@ md-reader/
 ├── config.py           # Конфигурация Flask и ограничений загрузки
 ├── routes/
 │   └── api.py          # API endpoints, сгруппированные в blueprint
+├── static/             # Вынесенные ассеты (CSS/JS)
+│   ├── css/main.css
+│   └── js/main.js
 ├── services/           # Бизнес-логика и утилиты
 │   ├── diff_service.py
 │   ├── file_service.py
