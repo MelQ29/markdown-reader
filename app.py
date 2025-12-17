@@ -11,16 +11,15 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.config.from_object(Config)
     
-    # Get working directory from config (WORK_DIR env var or default UPLOAD_FOLDER)
-    work_dir = Config.get_work_directory()
-    app.config['WORK_DIR'] = work_dir
+    # Get upload directory from config
+    upload_folder = os.path.abspath(app.config['UPLOAD_FOLDER'])
     
     # Create directory if it doesn't exist
     # For existing directories, verify it's actually a directory
-    if not os.path.exists(work_dir):
-        ensure_upload_dir(work_dir)
-    elif not os.path.isdir(work_dir):
-        raise ValueError(f"Specified path '{work_dir}' is not a directory")
+    if not os.path.exists(upload_folder):
+        ensure_upload_dir(upload_folder)
+    elif not os.path.isdir(upload_folder):
+        raise ValueError(f"Specified path '{upload_folder}' is not a directory")
 
     app.register_blueprint(api_bp)
 

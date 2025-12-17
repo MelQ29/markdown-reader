@@ -1,4 +1,25 @@
 // ------------------------------
+// Browser Compatibility Check
+// ------------------------------
+(function checkBrowserCompatibility() {
+    if (!window.showOpenFilePicker || !window.showDirectoryPicker || !window.showSaveFilePicker) {
+        const message = 'Ваш браузер не поддерживает работу с локальными файлами через File System Access API.\n\n' +
+            'Для работы приложения требуется:\n' +
+            '• Chrome/Edge 86+\n' +
+            '• Opera 72+\n\n' +
+            'Firefox и Safari не поддерживают эту функциональность.';
+        alert(message);
+        // Disable file selection buttons
+        const folderBtn = document.getElementById('chooseFolderBtn');
+        const filesBtn = document.getElementById('chooseFilesBtn');
+        const addBtn = document.getElementById('addFilesBtn');
+        if (folderBtn) folderBtn.disabled = true;
+        if (filesBtn) filesBtn.disabled = true;
+        if (addBtn) addBtn.disabled = true;
+    }
+})();
+
+// ------------------------------
 // Application State
 // ------------------------------
 let currentFile = null;
@@ -165,10 +186,19 @@ function cancelInlineRename() {
 
 /**
  * Confirm and execute file rename
- * Handles both directory mode (rename in place) and individual files mode (save as new)
+ * Handles directory mode (rename in place).
+ * In individual files mode, rename is disabled.
  */
 async function confirmInlineRename() {
     if (!currentFile || !currentHandle) return;
+    
+    // Check if we're in directory mode - rename is only available in directory mode
+    if (!directoryHandle) {
+        alert('Переименование доступно только при работе с папкой. Используйте "📂 Открыть папку" для работы с папкой.');
+        cancelInlineRename();
+        return;
+    }
+    
     const input = document.getElementById('renameInput');
     const newBase = (input.value || '').trim();
     if (!newBase) {
@@ -185,74 +215,39 @@ async function confirmInlineRename() {
         const file = await currentHandle.getFile();
         const text = await file.text();
 
-        if (directoryHandle) {
-            // Directory mode: create new file, remove old one
-            const exists = await fileExistsInDirectory(newName);
-            if (exists) {
-                alert(`Файл "${newName}" уже существует.`);
-                return;
-            }
-            const canWriteDir = await ensurePermission(directoryHandle, true);
-            if (!canWriteDir) {
-                alert('Нет прав на запись в эту папку.');
-                return;
-            }
-            const newHandle = await directoryHandle.getFileHandle(newName, { create: true });
-            const writable = await newHandle.createWritable();
-            await writable.write(text);
-            await writable.close();
-
-            await directoryHandle.removeEntry(currentFile);
-
-            fileHandles = fileHandles.map(f => {
-                if (f.name === currentFile) {
-                    return { name: newName, handle: newHandle };
-                }
-                return f;
-            }).sort((a, b) => a.name.localeCompare(b.name));
-
-            currentFile = newName;
-            currentHandle = newHandle;
-        } else {
-            // Individual files mode: save as new file via dialog
-            if (!window.showSaveFilePicker) {
-                alert('Браузер не поддерживает сохранение файла (showSaveFilePicker).');
-                toggleRenameUI(false);
-                return;
-            }
-            const saveHandle = await window.showSaveFilePicker({
-                suggestedName: newName,
-                types: [{
-                    description: 'Markdown',
-                    accept: { 'text/markdown': ['.md'] }
-                }]
-            });
-            const writable = await saveHandle.createWritable();
-            await writable.write(text);
-            await writable.close();
-
-            // Update list: replace old entry with new handle+name
-            fileHandles = fileHandles.map(f => {
-                if (f.name === currentFile) {
-                    return { name: newName, handle: saveHandle };
-                }
-                return f;
-            }).sort((a, b) => a.name.localeCompare(b.name));
-
-            currentFile = newName;
-            currentHandle = saveHandle;
+        // Directory mode: create new file, remove old one
+        const exists = await fileExistsInDirectory(newName);
+        if (exists) {
+            alert(`Файл "${newName}" уже существует.`);
+            return;
         }
+        const canWriteDir = await ensurePermission(directoryHandle, true);
+        if (!canWriteDir) {
+            alert('Нет прав на запись в эту папку.');
+            return;
+        }
+        const newHandle = await directoryHandle.getFileHandle(newName, { create: true });
+        const writable = await newHandle.createWritable();
+        await writable.write(text);
+        await writable.close();
+
+        await directoryHandle.removeEntry(currentFile);
+
+        fileHandles = fileHandles.map(f => {
+            if (f.name === currentFile) {
+                return { name: newName, handle: newHandle };
+            }
+            return f;
+        }).sort((a, b) => a.name.localeCompare(b.name));
+
+        currentFile = newName;
+        currentHandle = newHandle;
 
         await saveState();
         renderFileList();
         await loadFile(newName);
         toggleRenameUI(false);
     } catch (error) {
-        // User cancelled the save dialog - silently cancel rename
-        if (error?.name === 'AbortError') {
-            toggleRenameUI(false);
-            return;
-        }
         console.error('Ошибка переименования', error);
         alert('Не удалось переименовать файл: ' + error.message);
     }
@@ -297,9 +292,13 @@ async function saveState() {
         fileHandles.forEach((item, index) => {
             handlesStore.put({ id: `file-${index}`, name: item.name, handle: item.handle });
         });
+        
+        // Update lastSavedNames with current file names
+        lastSavedNames = fileHandles.map(f => f.name);
+        
         metaStore.put({
             id: 'meta',
-            names: fileHandles.map(f => f.name),
+            names: lastSavedNames,
             mode: directoryHandle ? 'directory' : 'files',
             ts: Date.now()
         });
@@ -856,6 +855,10 @@ async function persistSave(newContent) {
         alert('Нет прав на запись. Разрешите доступ к файлу.');
         return;
     }
+    
+    // Store original content for rollback
+    const originalContent = rawContent;
+    
     try {
         const writable = await currentHandle.createWritable();
         await writable.write(newContent);
@@ -877,7 +880,22 @@ async function persistSave(newContent) {
         pendingSaveContent = '';
         await loadFile(currentFile);
     } catch (error) {
-        alert('Ошибка при сохранении файла: ' + error.message);
+        console.error('Ошибка записи:', error);
+        
+        // Attempt to restore original content
+        try {
+            const backupWritable = await currentHandle.createWritable();
+            await backupWritable.write(originalContent);
+            await backupWritable.close();
+            
+            rawContent = originalContent;
+            alert('Не удалось сохранить изменения. Файл восстановлен к предыдущей версии.');
+        } catch (restoreError) {
+            console.error('Критическая ошибка восстановления:', restoreError);
+            alert('КРИТИЧНО: Не удалось сохранить изменения и восстановить файл. Проверьте диск и права доступа. Исходное содержимое может быть потеряно.');
+        }
+        
+        throw error;
     }
 }
 

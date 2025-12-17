@@ -21,9 +21,9 @@ api_bp = Blueprint('api', __name__)
 
 @api_bp.route('/api/files', methods=['GET'])
 def get_files():
-    """Get list of all markdown files in the working directory."""
-    work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
-    files = list_markdown_files(work_dir)
+    """Get list of all markdown files in the upload directory."""
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    files = list_markdown_files(upload_folder)
     return jsonify(files)
 
 
@@ -50,8 +50,8 @@ def upload_file():
         if new_filename_from_request:
             filename = sanitize_filename(new_filename_from_request)
 
-        work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
-        filepath = build_filepath(work_dir, filename)
+        upload_folder = current_app.config['UPLOAD_FOLDER']
+        filepath = build_filepath(upload_folder, filename)
 
         # Return conflict if file exists and no alternative name provided
         if os.path.exists(filepath) and not new_filename_from_request:
@@ -71,8 +71,8 @@ def file_content(filename):
     POST: Updates file content with provided text.
     """
     safe_name = sanitize_filename(filename)
-    work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
-    filepath = build_filepath(work_dir, safe_name)
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    filepath = build_filepath(upload_folder, safe_name)
 
     if not os.path.exists(filepath):
         return jsonify({'error': 'Файл не найден'}), 404
@@ -108,8 +108,8 @@ def file_content(filename):
 def delete_file(filename):
     """Delete file."""
     safe_name = sanitize_filename(filename)
-    work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
-    filepath = build_filepath(work_dir, safe_name)
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    filepath = build_filepath(upload_folder, safe_name)
 
     if not os.path.exists(filepath):
         return jsonify({'error': 'Файл не найден'}), 404
@@ -129,8 +129,8 @@ def rename_file_route(filename):
     Returns 400 if new name is not provided or invalid.
     """
     safe_name = sanitize_filename(filename)
-    work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
-    old_filepath = build_filepath(work_dir, safe_name)
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    old_filepath = build_filepath(upload_folder, safe_name)
 
     if not os.path.exists(old_filepath):
         return jsonify({'error': 'Файл для переименования не найден'}), 404
@@ -142,7 +142,7 @@ def rename_file_route(filename):
     if not new_name:
         return jsonify({'error': 'Новое имя не указано'}), 400
 
-    new_filepath = build_filepath(work_dir, new_name)
+    new_filepath = build_filepath(upload_folder, new_name)
 
     # Check if target filename already exists
     if os.path.exists(new_filepath):
@@ -175,9 +175,9 @@ def diff_files():
     if not before_name or not after_name:
         return jsonify({'error': 'Не указаны оба файла для сравнения'}), 400
 
-    work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
-    before_path = build_filepath(work_dir, before_name)
-    after_path = build_filepath(work_dir, after_name)
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    before_path = build_filepath(upload_folder, before_name)
+    after_path = build_filepath(upload_folder, after_name)
 
     if not os.path.exists(before_path):
         return jsonify({'error': f'Файл "{before_name}" не найден'}), 404
