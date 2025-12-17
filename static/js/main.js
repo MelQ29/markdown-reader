@@ -1,9 +1,26 @@
+// ------------------------------
+// Application State
+// ------------------------------
 let currentFile = null;
+let currentHandle = null;
 let rawContent = '';
 let isEditing = false;
 let beforeSaveSnapshot = '';
 let pendingSaveContent = '';
+let isRenaming = false;
 
+// Working state for selected files / directory
+let directoryHandle = null;
+let fileHandles = []; // Array of {name, handle} objects
+let currentSourceLabel = 'Источник не выбран';
+let lastSavedMode = null;
+let lastSavedNames = [];
+let restoreNeeded = false;
+let isSidebarCollapsed = false;
+
+// ------------------------------
+// Markdown / Diff Utilities
+// ------------------------------
 const md = window.markdownit({
     html: true,
     linkify: true,
@@ -22,131 +39,539 @@ let dmp = null;
 try {
     dmp = new diff_match_patch();
 } catch (e) {
-    console.error('diff_match_patch не инициализирован, diff-подсветка отключена', e);
+    console.error('diff_match_patch not initialized, diff highlighting disabled', e);
 }
 
-document.getElementById('fileInput').addEventListener('change', async function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    await uploadWithConflictHandling(file);
-    e.target.value = '';
-});
+// ------------------------------
+// IndexedDB Helpers for Persisting Selected Files State
+// ------------------------------
+const DB_NAME = 'md-reader-state';
+const STORE_HANDLES = 'handles';
+const STORE_META = 'meta';
+const SOURCE_INFO_ID = 'selectedSourceInfo';
 
-async function uploadWithConflictHandling(file, newFilename = null) {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (newFilename) {
-        formData.append('newFilename', newFilename);
-    }
-    try {
-        const response = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData
-        });
-        const data = await response.json();
-        if (response.ok) {
-            loadFileList();
-            loadFile(data.filename);
-        } else if (response.status === 409 && data.error === 'file_exists') {
-            const newName = prompt(
-                `Файл с именем "${data.filename}" уже существует. Введите новое имя:`,
-                data.filename.replace('.md', '')
-            );
-            if (newName && newName.trim() !== '') {
-                await uploadWithConflictHandling(file, newName);
-            }
-        } else {
-            alert('Ошибка: ' + data.error);
+/**
+ * Update source info display (folder/files status)
+ * @param {string} text - Status text to display
+ */
+function setSourceInfo(text) {
+    currentSourceLabel = text;
+    const el = document.getElementById(SOURCE_INFO_ID);
+    if (el) el.textContent = text;
+}
+
+/**
+ * Show/hide restore access button
+ * @param {boolean} show - Whether to show the button
+ * @param {string} label - Button label text
+ */
+function showRestoreButton(show, label = 'Восстановить доступ') {
+    const btn = document.getElementById('restoreAccessBtn');
+    if (!btn) return;
+    btn.textContent = `🔄 ${label}`;
+    if (show) btn.classList.remove('hidden');
+    else btn.classList.add('hidden');
+}
+
+/**
+ * Enable/disable rename functionality visibility
+ * @param {boolean} enabled - Whether rename should be available
+ */
+function setRenameVisible(enabled) {
+    const startBtn = document.getElementById('renameStartBtn');
+    const form = document.getElementById('renameEditGroup');
+    const titleWrap = document.getElementById('titleWithRename');
+    if (!startBtn || !form) return;
+    if (!enabled) {
+        startBtn.classList.add('is-hidden');
+        form.classList.add('hidden');
+        titleWrap?.classList.remove('editing');
+        isRenaming = false;
+    } else {
+        startBtn.classList.remove('is-hidden');
+        if (!isRenaming) {
+            form.classList.add('hidden');
+            titleWrap?.classList.remove('editing');
         }
-    } catch (error) {
-        alert('Ошибка при загрузке файла: ' + error.message);
     }
 }
 
-async function loadFileList() {
+/**
+ * Ensure filename has .md extension
+ * @param {string} name - Filename to check
+ * @returns {string} Filename with .md extension
+ */
+function ensureMdExtension(name) {
+    if (!name) return '';
+    const trimmed = name.trim();
+    if (trimmed.toLowerCase().endsWith('.md')) return trimmed;
+    return `${trimmed}.md`;
+}
+
+/**
+ * Check if file exists in current directory
+ * @param {string} name - Filename to check
+ * @returns {Promise<boolean>} True if file exists
+ */
+async function fileExistsInDirectory(name) {
+    if (!directoryHandle) return false;
     try {
-        const response = await fetch('/api/files');
-        const files = await response.json();
-        const fileList = document.getElementById('fileList');
-        if (files.length === 0) {
-            fileList.innerHTML = '<div class="empty-state">Нет загруженных файлов</div>';
-            return;
-        }
-        fileList.innerHTML = files.map(file => `
-            <div class="file-item ${file.name === currentFile ? 'active' : ''}" data-filename="${file.name}">
-                <span class="file-name" onclick="loadFile('${file.name}')">${file.name}</span>
-                <div class="file-actions">
-                    <button class="rename-btn" onclick="renameFile('${file.name}', event)">✏️</button>
-                    <button class="delete-btn" onclick="deleteFile('${file.name}', event)">✕</button>
-                </div>
-            </div>
-        `).join('');
-    } catch (error) {
-        console.error('Ошибка при загрузке списка файлов:', error);
+        await directoryHandle.getFileHandle(name, { create: false });
+        return true;
+    } catch (e) {
+        return false;
     }
 }
 
-async function renameFile(filename, event) {
-    event.stopPropagation();
-    const newName = prompt(`Переименовать файл "${filename}":`, filename.replace('.md', ''));
-    if (!newName || newName.trim() === '' || newName === filename.replace('.md', '')) {
+/**
+ * Toggle rename UI between edit and view modes
+ * @param {boolean} show - True to show edit mode, false for view mode
+ */
+function toggleRenameUI(show) {
+    const form = document.getElementById('renameEditGroup');
+    const startBtn = document.getElementById('renameStartBtn');
+    const titleWrap = document.getElementById('titleWithRename');
+    if (show) {
+        form.classList.remove('hidden');
+        startBtn.classList.add('hidden');
+        titleWrap?.classList.add('editing');
+        isRenaming = true;
+    } else {
+        form.classList.add('hidden');
+        startBtn.classList.remove('hidden');
+        titleWrap?.classList.remove('editing');
+        isRenaming = false;
+    }
+}
+
+/**
+ * Start inline file rename - enter edit mode
+ */
+function startInlineRename() {
+    if (!currentFile) return;
+    const input = document.getElementById('renameInput');
+    input.value = currentFile.replace(/\.md$/i, '');
+    toggleRenameUI(true);
+    input.focus();
+    input.select();
+}
+
+/**
+ * Cancel inline rename - exit edit mode
+ */
+function cancelInlineRename() {
+    toggleRenameUI(false);
+}
+
+/**
+ * Confirm and execute file rename
+ * Handles both directory mode (rename in place) and individual files mode (save as new)
+ */
+async function confirmInlineRename() {
+    if (!currentFile || !currentHandle) return;
+    const input = document.getElementById('renameInput');
+    const newBase = (input.value || '').trim();
+    if (!newBase) {
+        alert('Введите имя файла.');
+        return;
+    }
+    const newName = ensureMdExtension(newBase);
+    if (newName === currentFile) {
+        cancelInlineRename();
         return;
     }
     try {
-        const response = await fetch(`/api/rename/${filename}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ newName: newName })
+        // Read current file content
+        const file = await currentHandle.getFile();
+        const text = await file.text();
+
+        if (directoryHandle) {
+            // Directory mode: create new file, remove old one
+            const exists = await fileExistsInDirectory(newName);
+            if (exists) {
+                alert(`Файл "${newName}" уже существует.`);
+                return;
+            }
+            const canWriteDir = await ensurePermission(directoryHandle, true);
+            if (!canWriteDir) {
+                alert('Нет прав на запись в эту папку.');
+                return;
+            }
+            const newHandle = await directoryHandle.getFileHandle(newName, { create: true });
+            const writable = await newHandle.createWritable();
+            await writable.write(text);
+            await writable.close();
+
+            await directoryHandle.removeEntry(currentFile);
+
+            fileHandles = fileHandles.map(f => {
+                if (f.name === currentFile) {
+                    return { name: newName, handle: newHandle };
+                }
+                return f;
+            }).sort((a, b) => a.name.localeCompare(b.name));
+
+            currentFile = newName;
+            currentHandle = newHandle;
+        } else {
+            // Individual files mode: save as new file via dialog
+            if (!window.showSaveFilePicker) {
+                alert('Браузер не поддерживает сохранение файла (showSaveFilePicker).');
+                toggleRenameUI(false);
+                return;
+            }
+            const saveHandle = await window.showSaveFilePicker({
+                suggestedName: newName,
+                types: [{
+                    description: 'Markdown',
+                    accept: { 'text/markdown': ['.md'] }
+                }]
+            });
+            const writable = await saveHandle.createWritable();
+            await writable.write(text);
+            await writable.close();
+
+            // Update list: replace old entry with new handle+name
+            fileHandles = fileHandles.map(f => {
+                if (f.name === currentFile) {
+                    return { name: newName, handle: saveHandle };
+                }
+                return f;
+            }).sort((a, b) => a.name.localeCompare(b.name));
+
+            currentFile = newName;
+            currentHandle = saveHandle;
+        }
+
+        await saveState();
+        renderFileList();
+        await loadFile(newName);
+        toggleRenameUI(false);
+    } catch (error) {
+        // User cancelled the save dialog - silently cancel rename
+        if (error?.name === 'AbortError') {
+            toggleRenameUI(false);
+            return;
+        }
+        console.error('Ошибка переименования', error);
+        alert('Не удалось переименовать файл: ' + error.message);
+    }
+}
+
+function openDb() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(STORE_HANDLES)) {
+                db.createObjectStore(STORE_HANDLES, { keyPath: 'id' });
+            }
+            if (!db.objectStoreNames.contains(STORE_META)) {
+                db.createObjectStore(STORE_META, { keyPath: 'id' });
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function saveState() {
+    try {
+        const db = await openDb();
+        const tx = db.transaction([STORE_HANDLES, STORE_META], 'readwrite');
+        const handlesStore = tx.objectStore(STORE_HANDLES);
+        const metaStore = tx.objectStore(STORE_META);
+
+        // Clear previous entries
+        handlesStore.clear();
+
+        // Save directory handle (if selected)
+        if (directoryHandle) {
+            handlesStore.put({ id: 'directory', handle: directoryHandle });
+            metaStore.put({ id: 'mode', value: 'directory' });
+        } else {
+            metaStore.put({ id: 'mode', value: 'files' });
+        }
+
+        // Save selected file handles
+        fileHandles.forEach((item, index) => {
+            handlesStore.put({ id: `file-${index}`, name: item.name, handle: item.handle });
         });
-        const data = await response.json();
-        if (response.ok) {
-            if (currentFile === filename) {
-                loadFile(data.newName);
-            } else {
-                loadFileList();
+        metaStore.put({
+            id: 'meta',
+            names: fileHandles.map(f => f.name),
+            mode: directoryHandle ? 'directory' : 'files',
+            ts: Date.now()
+        });
+        metaStore.put({ id: 'ts', value: Date.now() });
+
+        await new Promise((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+        });
+    } catch (error) {
+        console.warn('Не удалось сохранить состояние выбранных файлов', error);
+    }
+}
+
+async function restoreState() {
+    try {
+        const db = await openDb();
+        const tx = db.transaction([STORE_HANDLES, STORE_META], 'readonly');
+        const handlesStore = tx.objectStore(STORE_HANDLES);
+        const metaStore = tx.objectStore(STORE_META);
+
+        const modeReq = metaStore.get('mode');
+        const handlesReq = handlesStore.getAll();
+        const metaReq = metaStore.get('meta');
+
+        const [modeEntry, handles, metaEntry] = await Promise.all([
+            new Promise((res) => { modeReq.onsuccess = () => res(modeReq.result); modeReq.onerror = () => res(null); }),
+            new Promise((res) => { handlesReq.onsuccess = () => res(handlesReq.result || []); handlesReq.onerror = () => res([]); }),
+            new Promise((res) => { metaReq.onsuccess = () => res(metaReq.result); metaReq.onerror = () => res(null); })
+        ]);
+
+        const mode = modeEntry?.value || 'files';
+        lastSavedMode = metaEntry?.mode || mode;
+        lastSavedNames = metaEntry?.names || [];
+
+        if (mode === 'directory') {
+            const dirEntry = handles.find(h => h.id === 'directory');
+            if (dirEntry && (await ensurePermission(dirEntry.handle, false))) {
+                directoryHandle = dirEntry.handle;
+                await loadDirectoryFiles(directoryHandle);
             }
         } else {
-            alert('Ошибка: ' + data.error);
+            const fileEntries = handles.filter(h => h.id.startsWith('file-'));
+            fileHandles = [];
+            for (const entry of fileEntries) {
+                if (await ensurePermission(entry.handle, false)) {
+                    fileHandles.push({ name: entry.name || entry.handle.name, handle: entry.handle });
+                }
+            }
+        }
+        await new Promise((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+        });
+
+        restoreNeeded = (!directoryHandle && fileHandles.length === 0 && lastSavedNames.length > 0);
+        showRestoreButton(restoreNeeded, restoreNeeded ? 'Нужно разрешение — выбрать снова' : 'Восстановить доступ');
+        setRenameVisible(fileHandles.length > 0);
+        if (fileHandles.length === 0) {
+            clearViewerState();
+        } else if (!currentFile && fileHandles.length > 0) {
+            await loadFile(fileHandles[0].name);
         }
     } catch (error) {
-        alert('Ошибка при переименовании файла: ' + error.message);
+        console.warn('Не удалось восстановить состояние выбранных файлов', error);
     }
+}
+
+async function ensurePermission(handle, write = false) {
+    if (!handle) return false;
+    const opts = { mode: write ? 'readwrite' : 'read' };
+    if ((await handle.queryPermission(opts)) === 'granted') return true;
+    const result = await handle.requestPermission(opts);
+    return result === 'granted';
+}
+
+// ------------------------------
+// File / Directory Selection
+// ------------------------------
+async function pickDirectory() {
+    if (!window.showDirectoryPicker) {
+        alert('Ваш браузер не поддерживает выбор директорий (нужен Chromium 86+).');
+        return;
+    }
+    try {
+        const dirHandle = await window.showDirectoryPicker();
+        directoryHandle = dirHandle;
+        fileHandles = [];
+        await loadDirectoryFiles(dirHandle);
+        await saveState();
+        const count = fileHandles.length;
+        if (count === 0) {
+            clearViewerState();
+            setSourceInfo(`Папка: ${dirHandle.name} — .md не найдены`);
+            alert('В выбранной папке не найдено файлов .md');
+        } else {
+            setSourceInfo(`Папка: ${dirHandle.name} — файлов: ${count}`);
+            await loadFile(fileHandles[0].name);
+        }
+        renderFileList();
+        showRestoreButton(false);
+        restoreNeeded = false;
+    } catch (err) {
+        if (err?.name === 'AbortError') {
+            return;
+        }
+        // Windows/Edge may block system directories (Downloads, etc.)
+        if (err?.name === 'SecurityError') {
+            alert('Эта папка защищена системой. Выберите другую папку или откройте отдельные файлы.');
+            return;
+        }
+        console.error('Не удалось открыть директорию', err);
+    }
+}
+
+async function loadDirectoryFiles(dirHandle) {
+    fileHandles = [];
+    try {
+        for await (const entry of dirHandle.values()) {
+            if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.md')) {
+                fileHandles.push({ name: entry.name, handle: entry });
+            }
+        }
+        fileHandles.sort((a, b) => a.name.localeCompare(b.name));
+    } catch (error) {
+        console.error('Ошибка чтения директории', error);
+    }
+}
+
+async function pickFiles(append = false) {
+    if (!window.showOpenFilePicker) {
+        alert('Ваш браузер не поддерживает выбор файлов через File System Access API.');
+        return;
+    }
+    try {
+        const handles = await window.showOpenFilePicker({
+            multiple: true,
+            types: [{
+                description: 'Markdown',
+                accept: { 'text/markdown': ['.md'] }
+            }]
+        });
+        directoryHandle = null; // Individual files mode
+        const newItems = handles.map(h => ({ name: h.name, handle: h }));
+        if (!append) {
+            fileHandles = newItems;
+        } else {
+            const existingNames = new Set(fileHandles.map(f => f.name));
+            newItems.forEach(item => {
+                if (!existingNames.has(item.name)) {
+                    fileHandles.push(item);
+                }
+            });
+        }
+        fileHandles.sort((a, b) => a.name.localeCompare(b.name));
+        await saveState();
+        renderFileList();
+        const count = fileHandles.length;
+        if (count > 0) {
+            setSourceInfo(`Файлы: выбрано ${count}`);
+            await loadFile(fileHandles[0].name);
+        } else {
+            setSourceInfo('Источник не выбран');
+            clearViewerState();
+        }
+        showRestoreButton(false);
+        restoreNeeded = false;
+    } catch (err) {
+        if (err?.name !== 'AbortError') {
+            console.error('Не удалось выбрать файлы', err);
+        }
+    }
+}
+
+async function addMoreFiles() {
+    return pickFiles(true);
+}
+
+async function clearAllFiles() {
+    directoryHandle = null;
+    fileHandles = [];
+    currentFile = null;
+    currentHandle = null;
+    rawContent = '';
+    await saveState();
+    renderFileList();
+    clearViewerState();
+    setSourceInfo('Источник не выбран');
+    setRenameVisible(false);
+    showRestoreButton(false);
+}
+
+function clearViewerState() {
+    document.getElementById('contentTitle').textContent = 'Выберите файл для просмотра';
+    const viewer = getMainViewer();
+    if (viewer) viewer.innerHTML = '';
+    showWelcome(true);
+    document.getElementById('editToggleBtn').style.display = 'none';
+    const split = document.getElementById('editSplit');
+    const toolbar = document.getElementById('markdownToolbar');
+    split.classList.remove('visible');
+    toolbar.classList.add('hidden');
+    isEditing = false;
+    setRenameVisible(false);
+}
+
+function renderFileList() {
+    const fileList = document.getElementById('fileList');
+    if (!fileHandles || fileHandles.length === 0) {
+        fileList.innerHTML = '<div class="empty-state">Нет выбранных файлов</div>';
+        return;
+    }
+    fileList.innerHTML = fileHandles.map(file => `
+        <div class="file-item ${file.name === currentFile ? 'active' : ''}" data-filename="${file.name}">
+            <span class="file-name" onclick="loadFile('${file.name}')">${file.name}</span>
+            <div class="file-actions">
+                <button class="delete-btn" onclick="removeFromList('${file.name}', event)">✕</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function findHandleByName(name) {
+    return fileHandles.find(f => f.name === name)?.handle || null;
 }
 
 async function loadFile(filename) {
     if (isEditing) {
         toggleEditMode(true);
     }
+    if (isRenaming) {
+        cancelInlineRename();
+    }
+    const handle = findHandleByName(filename);
+    if (!handle) {
+        alert('Файл не найден в списке выбранных');
+        return;
+    }
+    const hasPerm = await ensurePermission(handle, false);
+    if (!hasPerm) {
+        alert('Нет доступа к файлу. Разрешите чтение.');
+        return;
+    }
     try {
-        const response = await fetch(`/api/file/${filename}`);
-        const data = await response.json();
-        if (response.ok) {
-            currentFile = filename;
-            rawContent = data.raw_content;
-            document.getElementById('contentTitle').textContent = data.filename;
-            const contentBody = document.getElementById('contentBody');
+        const file = await handle.getFile();
+        const text = await file.text();
+        currentFile = filename;
+        currentHandle = handle;
+        rawContent = text;
+        document.getElementById('contentTitle').textContent = filename;
+        const contentBody = document.getElementById('contentBody');
 
-            let viewer = contentBody.querySelector('#mainMarkdownContent');
-            if (!viewer) {
-                viewer = document.createElement('div');
-                viewer.id = 'mainMarkdownContent';
-                viewer.className = 'markdown-content';
-                contentBody.prepend(viewer);
-            }
-            viewer.innerHTML = data.html_content;
-            const editor = contentBody.querySelector('#markdownEditor');
-            editor.value = rawContent;
-
-            document.getElementById('editToggleBtn').style.display = 'block';
-            showWelcome(false);
-            highlightCode();
-            addCopyButtons();
-            loadFileList();
-        } else {
-            alert('Ошибка: ' + data.error);
+        let viewer = contentBody.querySelector('#mainMarkdownContent');
+        if (!viewer) {
+            viewer = document.createElement('div');
+            viewer.id = 'mainMarkdownContent';
+            viewer.className = 'markdown-content';
+            contentBody.prepend(viewer);
         }
+        viewer.innerHTML = md.render(text);
+        const editor = contentBody.querySelector('#markdownEditor');
+        editor.value = rawContent;
+
+        document.getElementById('editToggleBtn').style.display = 'block';
+        showWelcome(false);
+        highlightCode();
+        addCopyButtons();
+        renderFileList();
+        setSourceInfo(directoryHandle ? `Папка: ${directoryHandle.name} — файлов: ${fileHandles.length}` : `Файлы: выбрано ${fileHandles.length}`);
+        setRenameVisible(true);
     } catch (error) {
         alert('Ошибка при загрузке файла: ' + error.message);
     }
@@ -318,64 +743,41 @@ function addCopyButtons() {
     });
 }
 
-async function deleteFile(filename, event) {
-    event.stopPropagation();
-    if (!confirm(`Удалить файл "${filename}"?`)) {
-        return;
+function removeFromList(filename, event) {
+    if (event) event.stopPropagation();
+    fileHandles = fileHandles.filter(f => f.name !== filename);
+    if (currentFile === filename) {
+        currentFile = null;
+        currentHandle = null;
+        clearViewerState();
     }
-    try {
-        const response = await fetch(`/api/delete/${filename}`, {
-            method: 'DELETE'
-        });
-        const data = await response.json();
-        if (response.ok) {
-            if (currentFile === filename) {
-                currentFile = null;
-                document.getElementById('contentTitle').textContent = 'Выберите файл для просмотра';
-                const viewer = getMainViewer();
-                if (viewer) viewer.innerHTML = '';
-                showWelcome(true);
-                document.getElementById('editToggleBtn').style.display = 'none';
-                const split = document.getElementById('editSplit');
-                const toolbar = document.getElementById('markdownToolbar');
-                split.classList.remove('visible');
-                toolbar.classList.add('hidden');
-                isEditing = false;
-            }
-            loadFileList();
-        } else {
-            alert('Ошибка: ' + data.error);
-        }
-    } catch (error) {
-        alert('Ошибка при удалении файла: ' + error.message);
-    }
+    saveState();
+    renderFileList();
 }
 
 async function showSaveDiff(beforeRaw, afterRaw) {
     try {
-        const response = await fetch('/api/diff/preview', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                before_content: beforeRaw,
-                after_content: afterRaw,
-                before_name: `${currentFile} (до)`,
-                after_name: `${currentFile} (после)`
-            })
-        });
-        const data = await response.json();
-        if (!response.ok) {
-            console.error('Ошибка diff:', data.error);
-            return;
-        }
-
-        document.getElementById('saveDiffRawTable').innerHTML = data.raw_diff_html;
+        // Generate diff locally
+        const payload = buildLocalDiffPayload(beforeRaw, afterRaw, `${currentFile} (до)`, `${currentFile} (после)`);
+        const rawContainer = document.getElementById('saveDiffRawTable');
+        const rawBefore = renderRawDiffSide(payload.before.raw_content, payload.after.raw_content, 'before');
+        const rawAfter = renderRawDiffSide(payload.before.raw_content, payload.after.raw_content, 'after');
+        rawContainer.innerHTML = `
+            <div class="diff-grid diff-grid--raw">
+                <div class="diff-column">
+                    <h3>До</h3>
+                    <div class="diff-raw-text">${withLineNumbers(rawBefore)}</div>
+                </div>
+                <div class="diff-column">
+                    <h3>После</h3>
+                    <div class="diff-raw-text">${withLineNumbers(rawAfter)}</div>
+                </div>
+            </div>
+        `;
         const beforeRendered = document.getElementById('saveDiffBeforeRendered');
         const afterRendered = document.getElementById('saveDiffAfterRendered');
-        beforeRendered.innerHTML = renderDiffSide(data.before.raw_content, data.after.raw_content, 'before');
-        afterRendered.innerHTML = renderDiffSide(data.before.raw_content, data.after.raw_content, 'after');
+        beforeRendered.innerHTML = renderDiffSide(payload.before.raw_content, payload.after.raw_content, 'before');
+        afterRendered.innerHTML = renderDiffSide(payload.before.raw_content, payload.after.raw_content, 'after');
         highlightCodeIn(beforeRendered);
         highlightCodeIn(afterRendered);
         cleanDiffTable(document.getElementById('saveDiffRawTable'));
@@ -448,35 +850,32 @@ function cancelEdit() {
 }
 
 async function persistSave(newContent) {
-    if (!currentFile) return;
+    if (!currentFile || !currentHandle) return;
+    const hasPerm = await ensurePermission(currentHandle, true);
+    if (!hasPerm) {
+        alert('Нет прав на запись. Разрешите доступ к файлу.');
+        return;
+    }
     try {
-        const response = await fetch(`/api/file/${currentFile}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ content: newContent })
-        });
-        const data = await response.json();
-        if (response.ok) {
-            rawContent = newContent;
-            isEditing = false;
-            const viewer = getMainViewer();
-            const split = document.getElementById('editSplit');
-            const toolbar = document.getElementById('markdownToolbar');
-            const toggleBtn = document.getElementById('editToggleBtn');
-            const cancelBtn = document.getElementById('cancelEditBtn');
-            split.classList.remove('visible');
-            viewer.style.display = 'block';
-            toolbar.classList.add('hidden');
-            toggleBtn.textContent = 'Редактировать';
-            toggleBtn.classList.remove('editing');
-            cancelBtn.classList.add('is-hidden');
-            pendingSaveContent = '';
-            await loadFile(currentFile);
-        } else {
-            alert('Ошибка сохранения: ' + data.error);
-        }
+        const writable = await currentHandle.createWritable();
+        await writable.write(newContent);
+        await writable.close();
+
+        rawContent = newContent;
+        isEditing = false;
+        const viewer = getMainViewer();
+        const split = document.getElementById('editSplit');
+        const toolbar = document.getElementById('markdownToolbar');
+        const toggleBtn = document.getElementById('editToggleBtn');
+        const cancelBtn = document.getElementById('cancelEditBtn');
+        split.classList.remove('visible');
+        viewer.style.display = 'block';
+        toolbar.classList.add('hidden');
+        toggleBtn.textContent = 'Редактировать';
+        toggleBtn.classList.remove('editing');
+        cancelBtn.classList.add('is-hidden');
+        pendingSaveContent = '';
+        await loadFile(currentFile);
     } catch (error) {
         alert('Ошибка при сохранении файла: ' + error.message);
     }
@@ -547,6 +946,80 @@ function renderDiffSide(rawA, rawB, mode) {
     return md.render(parts);
 }
 
+function buildLineDiffs(beforeRaw, afterRaw) {
+    // Line-based diff for per-line highlighting
+    if (!dmp) {
+        const lines = beforeRaw.split('\n').map((l) => [0, l]);
+        return lines;
+    }
+    const a = beforeRaw.split('\n');
+    const b = afterRaw.split('\n');
+    // Use diff_linesToChars_ for line-based diff
+    const aText = a.join('\n');
+    const bText = b.join('\n');
+    const chars = dmp.diff_linesToChars_(aText, bText);
+    let diffs = dmp.diff_main(chars.chars1, chars.chars2, false);
+    dmp.diff_charsToLines_(diffs, chars.lineArray);
+    dmp.diff_cleanupSemantic(diffs);
+    // Expand diff to individual lines
+    const lineDiffs = [];
+    diffs.forEach(([op, text]) => {
+        const rows = text.split('\n');
+        // Remove possible trailing empty line from split
+        if (rows.length > 0 && rows[rows.length - 1] === '') {
+            rows.pop();
+        }
+        rows.forEach((line) => lineDiffs.push([op, line]));
+    });
+    return lineDiffs;
+}
+
+function renderRawDiffSide(rawA, rawB, mode) {
+    const diffs = buildLineDiffs(rawA, rawB);
+    const parts = diffs.map(([op, line]) => {
+        let cls = '';
+        if (mode === 'before') {
+            if (op === -1) cls = 'diff-mark-sub';
+            else if (op === 0) cls = '';
+            else if (op === 1) return ''; // Added in after, don't show in before
+        } else {
+            if (op === 1) cls = 'diff-mark-add';
+            else if (op === 0) cls = '';
+            else if (op === -1) return ''; // Deleted in before, don't show in after
+        }
+        const escaped = md.utils.escapeHtml(line);
+        if (!cls) return escaped;
+        return `<mark class="${cls}">${escaped}</mark>`;
+    }).join('\n');
+    return parts;
+}
+
+function withLineNumbers(htmlString) {
+    const lines = htmlString.split('\n');
+    const numbered = lines.map((line, idx) => {
+        const safeLine = line === '' ? '&nbsp;' : line;
+        return `<div class="diff-line"><span class="diff-line-num">${idx + 1}</span><span class="diff-line-text">${safeLine}</span></div>`;
+    }).join('');
+    return numbered;
+}
+
+function buildLocalDiffPayload(beforeRaw, afterRaw, beforeName, afterName) {
+    // Use diff_match_patch for HTML diff table
+    let rawDiffHtml = '';
+    if (dmp) {
+        const diffs = dmp.diff_main(beforeRaw, afterRaw);
+        dmp.diff_cleanupSemantic(diffs);
+        rawDiffHtml = dmp.diff_prettyHtml(diffs);
+    } else {
+        rawDiffHtml = '<div>diff недоступен</div>';
+    }
+    return {
+        raw_diff_html: rawDiffHtml,
+        before: { filename: beforeName, raw_content: beforeRaw },
+        after: { filename: afterName, raw_content: afterRaw }
+    };
+}
+
 const editorEl = document.getElementById('markdownEditor');
 const livePreviewEl = document.getElementById('livePreview');
 
@@ -583,8 +1056,55 @@ function syncRenderedDiff(source, target) {
     renderedDiffSyncLock = false;
 }
 
+// Selection Button Event Handlers
+document.getElementById('chooseFolderBtn').addEventListener('click', pickDirectory);
+document.getElementById('chooseFilesBtn').addEventListener('click', () => pickFiles(false));
+document.getElementById('addFilesBtn').addEventListener('click', addMoreFiles);
+document.getElementById('clearFilesBtn').addEventListener('click', clearAllFiles);
+document.getElementById('renameStartBtn').addEventListener('click', startInlineRename);
+document.getElementById('renameCancelBtn').addEventListener('click', cancelInlineRename);
+document.getElementById('renameConfirmBtn').addEventListener('click', confirmInlineRename);
+document.getElementById('restoreAccessBtn').addEventListener('click', () => {
+    if (lastSavedMode === 'directory') {
+        pickDirectory();
+    } else {
+        pickFiles(false);
+    }
+});
+document.getElementById('sidebarToggleBtn').addEventListener('click', toggleSidebar);
+
 document.getElementById('markdownToolbar').classList.add('hidden');
 document.getElementById('cancelEditBtn').classList.add('is-hidden');
 
-loadFileList();
+// Warn before closing/refreshing page if files are selected
+window.addEventListener('beforeunload', (event) => {
+    if (fileHandles.length === 0 && !directoryHandle) return;
+    const message = 'Выбранные файлы могут быть утрачены. Обновить страницу?';
+    event.preventDefault();
+    event.returnValue = message;
+    return message;
+});
+
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const toggleBtn = document.getElementById('sidebarToggleBtn');
+    if (!sidebar || !toggleBtn) return;
+    isSidebarCollapsed = !isSidebarCollapsed;
+    sidebar.classList.toggle('collapsed', isSidebarCollapsed);
+    toggleBtn.textContent = isSidebarCollapsed ? '⏵' : '⏴';
+    toggleBtn.setAttribute('aria-label', isSidebarCollapsed ? 'Развернуть' : 'Свернуть');
+}
+
+// Restore previous state of selected files/directories
+(async () => {
+    await restoreState();
+    renderFileList();
+    if (fileHandles.length > 0) {
+        await loadFile(fileHandles[0].name);
+    } else {
+        setSourceInfo('Источник не выбран');
+        setRenameVisible(false);
+    }
+})();
+
 

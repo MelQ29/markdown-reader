@@ -21,15 +21,19 @@ api_bp = Blueprint('api', __name__)
 
 @api_bp.route('/api/files', methods=['GET'])
 def get_files():
-    """Get list of all uploaded .md files."""
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    files = list_markdown_files(upload_folder)
+    """Get list of all markdown files in the working directory."""
+    work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
+    files = list_markdown_files(work_dir)
     return jsonify(files)
 
 
 @api_bp.route('/api/upload', methods=['POST'])
 def upload_file():
-    """Upload .md file with duplicate handling."""
+    """Upload .md file with duplicate handling.
+    
+    Returns 409 if file exists and no new filename provided.
+    Returns 400 if file format is invalid or file is missing.
+    """
     if 'file' not in request.files:
         return jsonify({'error': 'Файл не найден'}), 400
 
@@ -41,13 +45,15 @@ def upload_file():
     if file and allowed_file(file.filename, allowed_extensions):
         filename = sanitize_filename(file.filename)
 
+        # Check if client provided alternative filename (for duplicate handling)
         new_filename_from_request = request.form.get('newFilename')
         if new_filename_from_request:
             filename = sanitize_filename(new_filename_from_request)
 
-        upload_folder = current_app.config['UPLOAD_FOLDER']
-        filepath = build_filepath(upload_folder, filename)
+        work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
+        filepath = build_filepath(work_dir, filename)
 
+        # Return conflict if file exists and no alternative name provided
         if os.path.exists(filepath) and not new_filename_from_request:
             return jsonify({'error': 'file_exists', 'filename': filename}), 409
 
@@ -59,15 +65,20 @@ def upload_file():
 
 @api_bp.route('/api/file/<filename>', methods=['GET', 'POST'])
 def file_content(filename):
-    """Get or update file content."""
+    """Get or update file content.
+    
+    GET: Returns raw markdown content and rendered HTML.
+    POST: Updates file content with provided text.
+    """
     safe_name = sanitize_filename(filename)
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    filepath = build_filepath(upload_folder, safe_name)
+    work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
+    filepath = build_filepath(work_dir, safe_name)
 
     if not os.path.exists(filepath):
         return jsonify({'error': 'Файл не найден'}), 404
 
     if request.method == 'POST':
+        # Update file content
         data = request.get_json() or {}
         content = data.get('content')
 
@@ -80,6 +91,7 @@ def file_content(filename):
         except Exception as exc:  # pragma: no cover - defensive
             return jsonify({'error': f'Ошибка при сохранении файла: {str(exc)}'}), 500
 
+    # GET: Read and render file
     try:
         raw_content = read_file_content(filepath)
         html_content = render_markdown(raw_content)
@@ -96,8 +108,8 @@ def file_content(filename):
 def delete_file(filename):
     """Delete file."""
     safe_name = sanitize_filename(filename)
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    filepath = build_filepath(upload_folder, safe_name)
+    work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
+    filepath = build_filepath(work_dir, safe_name)
 
     if not os.path.exists(filepath):
         return jsonify({'error': 'Файл не найден'}), 404
@@ -111,10 +123,14 @@ def delete_file(filename):
 
 @api_bp.route('/api/rename/<filename>', methods=['POST'])
 def rename_file_route(filename):
-    """Rename file."""
+    """Rename a markdown file.
+    
+    Returns 409 if target filename already exists.
+    Returns 400 if new name is not provided or invalid.
+    """
     safe_name = sanitize_filename(filename)
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    old_filepath = build_filepath(upload_folder, safe_name)
+    work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
+    old_filepath = build_filepath(work_dir, safe_name)
 
     if not os.path.exists(old_filepath):
         return jsonify({'error': 'Файл для переименования не найден'}), 404
@@ -126,8 +142,9 @@ def rename_file_route(filename):
     if not new_name:
         return jsonify({'error': 'Новое имя не указано'}), 400
 
-    new_filepath = build_filepath(upload_folder, new_name)
+    new_filepath = build_filepath(work_dir, new_name)
 
+    # Check if target filename already exists
     if os.path.exists(new_filepath):
         return jsonify({'error': f'Файл с именем "{new_name}" уже существует'}), 409
 
@@ -140,7 +157,14 @@ def rename_file_route(filename):
 
 @api_bp.route('/api/diff', methods=['GET'])
 def diff_files():
-    """Return diff view for two files (raw and rendered)."""
+    """Return diff view for two files (raw and rendered).
+    
+    Query parameters:
+    - before: filename of the original file
+    - after: filename of the modified file
+    
+    Returns diff payload with raw content, rendered HTML, and diff table.
+    """
     before_name = request.args.get('before', '')
     after_name = request.args.get('after', '')
 
@@ -151,9 +175,9 @@ def diff_files():
     if not before_name or not after_name:
         return jsonify({'error': 'Не указаны оба файла для сравнения'}), 400
 
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    before_path = build_filepath(upload_folder, before_name)
-    after_path = build_filepath(upload_folder, after_name)
+    work_dir = current_app.config.get('WORK_DIR', current_app.config['UPLOAD_FOLDER'])
+    before_path = build_filepath(work_dir, before_name)
+    after_path = build_filepath(work_dir, after_name)
 
     if not os.path.exists(before_path):
         return jsonify({'error': f'Файл "{before_name}" не найден'}), 404
@@ -173,7 +197,16 @@ def diff_files():
 
 @api_bp.route('/api/diff/preview', methods=['POST'])
 def diff_preview():
-    """Return diff for before/after content (used before save)."""
+    """Return diff for before/after content (used before save).
+    
+    Request body should contain:
+    - before_content: original markdown text
+    - after_content: modified markdown text
+    - before_name: display name for original (optional)
+    - after_name: display name for modified (optional)
+    
+    Used to show diff preview modal before saving changes.
+    """
     data = request.get_json(silent=True) or {}
     before_raw = data.get('before_content', '')
     after_raw = data.get('after_content', '')

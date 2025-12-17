@@ -4,7 +4,7 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>MD Reader</title>
-        <!-- Highlight.js для подсветки синтаксиса -->
+        <!-- Highlight.js for syntax highlighting -->
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
         <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
         <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -23,25 +23,42 @@
 </head>
 <body>
     <div class="container">
-        <!-- Боковая панель -->
+        <!-- Sidebar -->
             <div class="sidebar">
                 <div class="sidebar-header">
-                    <h1>MD Reader</h1>
+                    <div class="sidebar-title-row">
+                        <h1><span class="title-full">MD Reader</span><span class="title-short">MD</span></h1>
+                        <button id="sidebarToggleBtn" class="icon-btn sidebar-toggle" title="Свернуть/развернуть">⏴</button>
+                    </div>
                     <div class="upload-section">
-                        <div class="file-input-wrapper">
-                            <input type="file" id="fileInput" accept=".md" />
-                            <label for="fileInput" class="file-input-label">📁 Загрузить .md файл</label>
+                        <div class="file-picker-buttons">
+                            <button id="chooseFolderBtn" class="file-input-label">📂 Открыть папку</button>
+                            <button id="chooseFilesBtn" class="file-input-label">📁 Открыть файлы</button>
+                            <button id="addFilesBtn" class="file-input-label secondary">➕ Добавить файлы</button>
+                            <button id="clearFilesBtn" class="file-input-label danger">🗑 Убрать все</button>
                         </div>
+                        <div id="selectedSourceInfo" class="source-info">Источник не выбран</div>
+                        <button id="restoreAccessBtn" class="file-input-label secondary small hidden">🔄 Восстановить доступ</button>
                     </div>
                 </div>
                 <div class="file-list" id="fileList">
                     <div class="empty-state">Нет загруженных файлов</div>
                 </div>
             </div>
-            <!-- Основная область контента -->
+            <!-- Main Content Area -->
                 <div class="content">
                     <div class="content-header">
-                        <h2 id="contentTitle">Выберите файл для просмотра</h2>
+                        <div class="title-with-rename" id="titleWithRename">
+                            <h2 id="contentTitle">Выберите файл для просмотра</h2>
+                            <div class="rename-inline">
+                                <button id="renameStartBtn" class="icon-btn" title="Переименовать">✏️</button>
+                                <div id="renameEditGroup" class="rename-edit hidden">
+                                    <input id="renameInput" class="rename-input inline" placeholder="Новое имя файла" />
+                                    <button id="renameConfirmBtn" class="icon-btn success" title="Сохранить">✔</button>
+                                    <button id="renameCancelBtn" class="icon-btn danger" title="Отменить">✖</button>
+                                </div>
+                            </div>
+                        </div>
                         <div class="header-actions">
                             <button id="cancelEditBtn" class="edit-toggle-btn cancel-edit-btn is-hidden" onclick="cancelEdit()">Отменить</button>
                             <button id="editToggleBtn" class="edit-toggle-btn" onclick="toggleEditMode()">Редактировать</button>
@@ -50,7 +67,7 @@
                     <div class="content-body" id="contentBody">
                         <div class="welcome-message">
                             <h2>Добро пожаловать!</h2>
-                            <p>Загрузите .md файл, чтобы начать чтение</p>
+                            <p>Откройте папку или выберите файлы .md, чтобы начать работу</p>
                         </div>
                             <div id="mainMarkdownContent" class="markdown-content"></div>
                         <div id="editSplit" class="edit-split">
